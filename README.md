@@ -6,7 +6,7 @@ SolarGuard AI analiza imágenes de paneles solares mediante un modelo preentrena
 
 ## Estado del proyecto
 
-El repositorio se encuentra en la etapa inicial de implementación. La configuración base de Python, `uv` y las dependencias ya está preparada; la integración del modelo, la interfaz de Streamlit, las reglas de priorización y las pruebas forman parte del desarrollo planificado.
+El repositorio se encuentra en la etapa inicial de implementación. La configuración base de Python, `uv`, la ingesta y validación de imágenes ya están preparadas; la integración del modelo, la interfaz de Streamlit, las reglas de priorización y el preprocesamiento forman parte del desarrollo planificado.
 
 ## Objetivos
 
@@ -18,7 +18,7 @@ El repositorio se encuentra en la etapa inicial de implementación. La configura
 
 ## Modelo y clases
 
-El prototipo utilizará `solarscan-yolov8n-cls`, un clasificador basado en YOLOv8n-cls publicado en [Hugging Face](https://huggingface.co/SaifElgalaly/solarscan-yolov8n-cls). El modelo trabaja con imágenes de entrada de 224 x 224 píxeles y reconoce seis condiciones visibles:
+El prototipo utilizará `solarscan-yolov8n-cls`, un clasificador basado en YOLOv8n-cls publicado en [Hugging Face](https://huggingface.co/SaifElgalaly/solarscan-yolov8n-cls). El modelo recibe fotografías RGB de paneles, redimensiona el lado menor a 224 píxeles, aplica un recorte central de 224 x 224 y escala los valores a `0..1`. Reconoce seis condiciones visibles:
 
 | Clase | Interpretación | Acción propuesta |
 | --- | --- | --- |
@@ -62,7 +62,7 @@ La confianza del modelo debe interpretarse junto con el contexto de la imagen y 
 - [uv](https://docs.astral.sh/uv/) para gestionar el entorno y las dependencias.
 - Windows, macOS o Linux.
 
-TensorFlow se mantiene en Python 3.13 porque sus ruedas disponibles no son compatibles con Python 3.14 en la configuración actual del proyecto.
+El runtime previsto para la inferencia es [ONNX Runtime](https://onnxruntime.ai/), porque SolarScan publica el artefacto `best.onnx` y un ejemplo de ejecución con ese runtime. La ingesta actual acepta JPEG, PNG y TIFF/GeoTIFF legible, pero entrega las imágenes en RGB para respetar el contrato del modelo; no calcula NDVI ni NDWI.
 
 ## Instalación
 
@@ -77,8 +77,23 @@ uv sync
 Para comprobar que las dependencias están disponibles:
 
 ```bash
-uv run python -c "import tensorflow, streamlit, pandas, plotly; print('Entorno listo')"
+uv run python -c "import onnxruntime, streamlit, pandas, plotly; print('Entorno listo')"
 ```
+
+Para ejecutar las pruebas de ingesta:
+
+```bash
+uv run pytest tests/test_ingesta.py -q
+```
+
+## Ingesta de imágenes
+
+El módulo `solarguard_ai.ingesta` expone dos operaciones:
+
+- `load_image(source)`: valida un archivo o fuente binaria, comprueba su integridad, dimensiones y formato, y devuelve una imagen RGB lista para el preprocesamiento.
+- `load_images(sources)`: procesa un lote y reporta el índice de la imagen que produzca un error.
+
+Se aceptan extensiones `.jpg`, `.jpeg`, `.png`, `.tif` y `.tiff`. Los archivos corruptos, las extensiones desconocidas, las discrepancias entre extensión y contenido y las imágenes excesivamente grandes se rechazan con errores descriptivos.
 
 ## Uso actual
 
@@ -100,7 +115,10 @@ uv run streamlit run app.py
 solarguard-ai/
 ├── src/
 │   └── solarguard_ai/
-│       └── __init__.py
+│       ├── __init__.py
+│       └── ingesta.py
+├── tests/
+│   └── test_ingesta.py
 ├── .python-version
 ├── LICENSE
 ├── Makefile
@@ -114,10 +132,10 @@ La estructura objetivo contempla separar la ingesta, el preprocesamiento, la inf
 ## Plan de trabajo
 
 1. Definir criterios de éxito y validar el modelo junto con su Model Card.
-2. Implementar la carga, validación y el preprocesamiento de imágenes.
+2. Implementar el preprocesamiento compatible con la entrada RGB de 224 x 224.
 3. Construir el servicio de inferencia y las reglas de priorización.
 4. Integrar la interfaz Streamlit y la generación de tickets de mantenimiento.
-5. Añadir pruebas con Pytest, seguimiento de ejecuciones con MLflow y revisión con Ruff.
+5. Añadir seguimiento de ejecuciones con MLflow y revisión con Ruff.
 6. Preparar Docker y realizar la validación final.
 
 ## Consideraciones de uso responsable
