@@ -5,10 +5,16 @@ description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.13,<3.14"
 dependencies = [
+    "onnxruntime>=1.29.0",
     "pandas>=3.0.5",
+    "pillow>=12.3.0",
     "plotly>=7.0.0",
     "streamlit>=1.63.0",
-    "tensorflow>=2.21.0",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.0.0",
 ]
 
 [project.scripts]
