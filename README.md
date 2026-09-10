@@ -6,7 +6,7 @@ SolarGuard AI analiza imágenes de paneles solares mediante un modelo preentrena
 
 ## Estado del proyecto
 
-El repositorio se encuentra en la etapa inicial de implementación. La configuración base de Python, `uv`, la ingesta y validación de imágenes ya están preparadas; la integración del modelo, la interfaz de Streamlit, las reglas de priorización y el preprocesamiento forman parte del desarrollo planificado.
+El repositorio se encuentra en la etapa inicial de implementación. La configuración base de Python, `uv`, la ingesta, la validación y el preprocesamiento de imágenes ya están preparados; la integración del modelo, la interfaz de Streamlit y las reglas de priorización forman parte del desarrollo planificado.
 
 ## Objetivos
 
@@ -80,10 +80,10 @@ Para comprobar que las dependencias están disponibles:
 uv run python -c "import onnxruntime, streamlit, pandas, plotly; print('Entorno listo')"
 ```
 
-Para ejecutar las pruebas de ingesta:
+Para ejecutar todas las pruebas:
 
 ```bash
-uv run pytest tests/test_ingesta.py -q
+uv run pytest -q
 ```
 
 ## Ingesta de imágenes
@@ -94,6 +94,18 @@ El módulo `solarguard_ai.ingesta` expone dos operaciones:
 - `load_images(sources)`: procesa un lote y reporta el índice de la imagen que produzca un error.
 
 Se aceptan extensiones `.jpg`, `.jpeg`, `.png`, `.tif` y `.tiff`. Los archivos corruptos, las extensiones desconocidas, las discrepancias entre extensión y contenido y las imágenes excesivamente grandes se rechazan con errores descriptivos.
+
+## Preprocesamiento
+
+El módulo `solarguard_ai.preprocesamiento` sigue el contrato publicado por SolarScan:
+
+1. Convierte la imagen a RGB.
+2. Redimensiona el lado menor a 224 píxeles con interpolación bilineal.
+3. Aplica un recorte central de `224 x 224`.
+4. Escala los valores RGB a `0..1`.
+5. Reordena el tensor a `NCHW`, la forma esperada por el artefacto ONNX.
+
+La función `preprocess_for_solarscan()` devuelve un tensor `float32` con forma `(1, 3, 224, 224)`. También se incluyen aumentos geométricos básicos, separación de canales RGB y utilidades opcionales para calcular NDVI y NDWI sobre arreglos multiespectrales. Estos índices no se incorporan al tensor SolarScan, porque el modelo fue entrenado para fotografías RGB.
 
 ## Uso actual
 
@@ -116,9 +128,11 @@ solarguard-ai/
 ├── src/
 │   └── solarguard_ai/
 │       ├── __init__.py
-│       └── ingesta.py
+│       ├── ingesta.py
+│       └── preprocesamiento.py
 ├── tests/
-│   └── test_ingesta.py
+│   ├── test_ingesta.py
+│   └── test_preprocesamiento.py
 ├── .python-version
 ├── LICENSE
 ├── Makefile
@@ -132,11 +146,10 @@ La estructura objetivo contempla separar la ingesta, el preprocesamiento, la inf
 ## Plan de trabajo
 
 1. Definir criterios de éxito y validar el modelo junto con su Model Card.
-2. Implementar el preprocesamiento compatible con la entrada RGB de 224 x 224.
-3. Construir el servicio de inferencia y las reglas de priorización.
-4. Integrar la interfaz Streamlit y la generación de tickets de mantenimiento.
-5. Añadir seguimiento de ejecuciones con MLflow y revisión con Ruff.
-6. Preparar Docker y realizar la validación final.
+2. Construir el servicio de inferencia y las reglas de priorización.
+3. Integrar la interfaz Streamlit y la generación de tickets de mantenimiento.
+4. Añadir seguimiento de ejecuciones con MLflow y revisión con Ruff.
+5. Preparar Docker y realizar la validación final.
 
 ## Consideraciones de uso responsable
 
