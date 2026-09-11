@@ -6,7 +6,7 @@ SolarGuard AI analiza imágenes de paneles solares mediante un modelo preentrena
 
 ## Estado del proyecto
 
-El repositorio se encuentra en la etapa inicial de implementación. La configuración base de Python, `uv`, la ingesta y validación de imágenes ya están preparadas; la integración del modelo, la interfaz de Streamlit, las reglas de priorización y el preprocesamiento forman parte del desarrollo planificado.
+El repositorio se encuentra en etapa de desarrollo. Ya se implementaron la configuración base con `uv`, la ingesta y validación de imágenes, el preprocesamiento compatible con el modelo, las reglas de priorización (tickets), la integración gRPC entre interfaz y backend, y una primera versión de la interfaz Streamlit. La integración del modelo real de inferencia (ONNX), el seguimiento con MLflow y la preparación para despliegue forman parte del trabajo planificado.
 
 ## Objetivos
 
@@ -95,17 +95,51 @@ El módulo `solarguard_ai.ingesta` expone dos operaciones:
 
 Se aceptan extensiones `.jpg`, `.jpeg`, `.png`, `.tif` y `.tiff`. Los archivos corruptos, las extensiones desconocidas, las discrepancias entre extensión y contenido y las imágenes excesivamente grandes se rechazan con errores descriptivos.
 
+## Integración gRPC (interfaz ↔ backend)
+
+La interfaz (Streamlit) y el backend se comunican con gRPC. La interfaz solo sube la imagen y dibuja el ticket; todo el procesamiento lo hace el backend:
+
+```text
+app.py (Streamlit) ──gRPC──▶ solarguard_ai.servidor_grpc
+   cliente_grpc.py               │
+                                  ├─ ingesta.load_image           (validar → RGB)
+                                  ├─ preprocesamiento.preprocesar (tensor 1×3×224×224)
+                                  ├─ inferencia.predecir          (clasificación, simulada)
+                                  └─ tickets.generar_ticket       (condición → ticket)
+```
+
+El contrato se define en `proto/solarguard.proto` y se regenera con `make grpc-gen`. Los archivos generados (`solarguard_pb2.py` y `solarguard_pb2_grpc.py`) se versionan en `solarguard_ai/grpc_interface/` para que nadie necesite regenerarlos.
+
+> La inferencia es por ahora una **simulación determinista** (misma imagen, mismo resultado). Cuando el módulo de inferencia real con ONNX Runtime esté listo, solo cambia la función `inferencia.predecir()`.
+
+Para levantar el sistema se necesitan dos terminales:
+
+```bash
+# Terminal 1: el backend gRPC
+uv run python -m solarguard_ai.servidor_grpc
+
+# Terminal 2: la interfaz web
+uv run streamlit run app.py
+```
+
+Pruebas de la integración:
+
+```bash
+uv run pytest tests/test_grpc.py -q
+```
+
 ## Uso actual
 
-El punto de entrada configurado actualmente es un comando de verificación del paquete:
+El punto de entrada del paquete es un comando de verificación:
 
 ```bash
 uv run solarguard-ai
 ```
 
-La aplicación de Streamlit y el flujo de inferencia se encuentran planificados, pero todavía no están incluidos en el repositorio. Cuando se incorpore `app.py`, el comando previsto será:
+La interfaz web de Streamlit y el backend gRPC ya están incluidos en el repositorio. Para usarlos se deben abrir dos terminales:
 
 ```bash
+uv run python -m solarguard_ai.servidor_grpc
 uv run streamlit run app.py
 ```
 
@@ -113,12 +147,28 @@ uv run streamlit run app.py
 
 ```text
 solarguard-ai/
+├── proto/
+│   └── solarguard.proto
+├── scripts/
+│   └── grpc_gen.py
 ├── src/
 │   └── solarguard_ai/
+│       ├── grpc_interface/
+│       │   ├── solarguard_pb2.py
+│       │   └── solarguard_pb2_grpc.py
 │       ├── __init__.py
-│       └── ingesta.py
+│       ├── ingesta.py
+│       ├── preprocesamiento.py
+│       ├── inferencia.py
+│       ├── tickets.py
+│       ├── servidor_grpc.py
+│       └── cliente_grpc.py
 ├── tests/
-│   └── test_ingesta.py
+│   ├── test_ingesta.py
+│   ├── test_preprocesamiento.py
+│   ├── test_tickets.py
+│   └── test_grpc.py
+├── app.py
 ├── .python-version
 ├── LICENSE
 ├── Makefile
