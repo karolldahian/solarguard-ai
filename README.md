@@ -6,7 +6,7 @@ SolarGuard AI analiza imágenes de paneles solares mediante un modelo preentrena
 
 ## Estado del proyecto
 
-El repositorio se encuentra en la etapa inicial de implementación. La configuración base de Python, `uv`, la ingesta, la validación y el preprocesamiento de imágenes ya están preparados; la integración del modelo, la interfaz de Streamlit y las reglas de priorización forman parte del desarrollo planificado.
+El repositorio se encuentra en la etapa inicial de implementación. La configuración base de Python, `uv`, la ingesta, la validación, el preprocesamiento y el servicio de inferencia ya están preparados; la interfaz de Streamlit y las reglas de priorización forman parte del desarrollo planificado.
 
 ## Objetivos
 
@@ -107,6 +107,25 @@ El módulo `solarguard_ai.preprocesamiento` sigue el contrato publicado por Sola
 
 La función `preprocess_for_solarscan()` devuelve un tensor `float32` con forma `(1, 3, 224, 224)`. También se incluyen aumentos geométricos básicos, separación de canales RGB y utilidades opcionales para calcular NDVI y NDWI sobre arreglos multiespectrales. Estos índices no se incorporan al tensor SolarScan, porque el modelo fue entrenado para fotografías RGB.
 
+## Servicio de inferencia
+
+El módulo `solarguard_ai.inferencia` utiliza el archivo ONNX publicado por SolarScan. Los pesos no se incluyen en el repositorio; deben descargarse desde [Hugging Face](https://huggingface.co/saifElgalaly/solarscan-yolov8n-cls) y pasarse mediante su ruta local:
+
+```python
+from solarguard_ai.inferencia import SolarScanInference
+from solarguard_ai.preprocesamiento import preprocess_for_solarscan
+
+service = SolarScanInference("models/best.onnx")
+tensor = preprocess_for_solarscan(image)
+result = service.predict(tensor)
+
+print(result.predicted_class)
+print(result.confidence)
+print(result.probabilities)
+```
+
+El servicio también expone `predict_batch()` para varias imágenes y almacena en caché las predicciones cuyo tensor sea idéntico. Una confianza inferior a `0.5` devuelve `Unknown`, siguiendo el comportamiento descrito en la ficha del modelo. Las entradas deben tener forma `(1, 3, 224, 224)` y valores `float32` entre `0` y `1`.
+
 ## Uso actual
 
 El punto de entrada configurado actualmente es un comando de verificación del paquete:
@@ -129,10 +148,12 @@ solarguard-ai/
 │   └── solarguard_ai/
 │       ├── __init__.py
 │       ├── ingesta.py
-│       └── preprocesamiento.py
+│       ├── preprocesamiento.py
+│       └── inferencia.py
 ├── tests/
 │   ├── test_ingesta.py
-│   └── test_preprocesamiento.py
+│   ├── test_preprocesamiento.py
+│   └── test_inferencia.py
 ├── .python-version
 ├── LICENSE
 ├── Makefile
