@@ -1,5 +1,5 @@
 # Declara objetivos que no representan archivos y siempre deben ejecutarse.
-.PHONY: help install run streamlit lock-check compile check
+.PHONY: help install run streamlit lock-check compile test check
 
 # Muestra una guía rápida de los comandos disponibles.
 help:
@@ -9,6 +9,7 @@ help:
 	@echo "  make streamlit  Inicia la aplicación Streamlit"
 	@echo "  make lock-check Comprueba que uv.lock está actualizado"
 	@echo "  make compile    Comprueba la sintaxis de los módulos Python"
+	@echo "  make test       Ejecuta las pruebas unitarias"
 	@echo "  make check      Ejecuta las validaciones disponibles"
 
 # Crea o actualiza el entorno virtual e instala las dependencias del proyecto.
@@ -31,5 +32,9 @@ lock-check:
 compile:
 	uv run python -m compileall src
 
+# Ejecuta la suite de pruebas aislada dentro del entorno administrado por uv.
+test:
+	uv run pytest -q
+
 # Ejecuta todas las validaciones disponibles para el estado actual del proyecto.
-check: lock-check compile
+check: lock-check compile test
