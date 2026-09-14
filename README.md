@@ -6,7 +6,7 @@ SolarGuard AI analiza imágenes de paneles solares mediante un modelo preentrena
 
 ## Estado del proyecto
 
-El repositorio se encuentra en la etapa inicial de implementación. La configuración base de Python, `uv`, la ingesta, la validación, el preprocesamiento y el servicio de inferencia ya están preparados; la interfaz de Streamlit y las reglas de priorización forman parte del desarrollo planificado.
+El repositorio se encuentra en la etapa inicial de implementación. La configuración base de Python, `uv`, la ingesta, la validación, el preprocesamiento, el servicio de inferencia y la priorización operativa ya están preparados; la interfaz de Streamlit forma parte del desarrollo planificado.
 
 ## Objetivos
 
@@ -27,9 +27,9 @@ El prototipo utilizará `solarscan-yolov8n-cls`, un clasificador basado en YOLOv
 | `Bird-drop` | Presencia de excremento de aves | Programar limpieza. |
 | `Physical-Damage` | Daño físico visible | Priorizar inspección o reparación. |
 | `Electrical-damage` | Posible daño eléctrico visible | Priorizar revisión técnica. |
-| `Snow-Covered` | Panel cubierto por nieve | Registrar la condición; tiene baja relevancia para el contexto local. |
+| `Snow-Covered` | Panel cubierto por nieve | Programar limpieza o retiro seguro de nieve; la cobertura reduce la exposición solar y puede disminuir la producción. |
 
-La confianza del modelo debe interpretarse junto con el contexto de la imagen y la revisión humana. Iluminación, sombras, reflejos, cámara, ángulo y condiciones reales de campo pueden afectar la predicción.
+La confianza del modelo debe interpretarse junto con el contexto de la imagen y la revisión humana. Iluminación, sombras, reflejos, cámara, ángulo y condiciones reales de campo pueden afectar la predicción. La capa de priorización aplica un umbral operativo configurable (`0.70` por defecto) para marcar resultados con baja confianza para revisión humana; este umbral es una regla operativa y no una métrica científica de precisión del modelo.
 
 ## Alcance
 
@@ -126,6 +126,49 @@ print(result.probabilities)
 
 El servicio también expone `predict_batch()` para varias imágenes y almacena en caché las predicciones cuyo tensor sea idéntico. Una confianza inferior a `0.5` devuelve `Unknown`, siguiendo el comportamiento descrito en la ficha del modelo. Las entradas deben tener forma `(1, 3, 224, 224)` y valores `float32` entre `0` y `1`.
 
+## Priorización de mantenimiento
+
+El módulo `solarguard_ai.priorizacion` convierte la salida de inferencia (`predicted_class` + `confidence`) en una prioridad operativa sin depender de ONNX Runtime ni de la interfaz:
+
+```python
+from solarguard_ai.priorizacion import prioritize
+
+result = prioritize("Dusty", 0.92)
+print(result.priority)  # medium
+print(result.recommended_action)  # Programar limpieza del panel.
+print(result.requires_human_review)  # False
+print(result.reason)
+```
+
+Prioridades:
+
+| Prioridad | Clases | Acción base |
+| --- | --- | --- |
+| `high` | `Electrical-damage`, `Physical-Damage` | Priorizar inspección técnica; en `Physical-Damage` evaluar reparación o sustitución sin sustitución automática. En `Electrical-damage` la recomendación no constituye un diagnóstico eléctrico definitivo y queda sujeta a validación humana. |
+| `medium` | `Dusty`, `Bird-drop`, `Snow-Covered`, `Unknown` | Programar limpieza o, para `Snow-Covered`, retiro seguro de nieve. `Unknown` requiere revisión humana o nueva captura y no significa panel sano. |
+| `low` | `Clean` | No requiere intervención inmediata. |
+
+La confianza no reduce una prioridad alta: por ejemplo `Electrical-damage` con `0.65` mantiene `high` y se marca `requires_human_review=True`. El umbral operativo por defecto es `0.70` (`confidence < 0.70` implica revisión; `== 0.70` no implica revisión por umbral; `Unknown` siempre requiere revisión) y es configurable por parámetro o desde un archivo de configuración, sin editar el código. El resultado es un `PriorityResult(priority, recommended_action, requires_human_review, reason)` reutilizable para tickets, interfaz u otros componentes.
+
+### Configuración del umbral
+
+El umbral de revisión humana puede cargarse desde un archivo de configuración TOML en lugar de pasarse en cada llamada:
+
+```toml
+# config/prioritization.toml
+[thresholds]
+review_confidence = 0.70
+```
+
+```python
+from solarguard_ai.priorizacion import load_priority_config, prioritize
+
+config = load_priority_config("config/prioritization.toml")
+result = prioritize("Dusty", 0.75, review_threshold=config.review_confidence)
+```
+
+La lectura del archivo siempre es explícita: `prioritize()` es una función pura y no lee configuraciones automáticamente. El valor debe ser numérico, finito y estar entre `0` y `1` inclusive; `config/prioritization.toml` es opcional y el valor por defecto sigue siendo `0.70`. Este umbral es una regla operativa y no una métrica científica de precisión del modelo.
+
 ## Uso actual
 
 El punto de entrada configurado actualmente es un comando de verificación del paquete:
@@ -149,11 +192,15 @@ solarguard-ai/
 │       ├── __init__.py
 │       ├── ingesta.py
 │       ├── preprocesamiento.py
-│       └── inferencia.py
+│       ├── inferencia.py
+│       └── priorizacion.py
+├── config/
+│   └── prioritization.toml
 ├── tests/
 │   ├── test_ingesta.py
 │   ├── test_preprocesamiento.py
-│   └── test_inferencia.py
+│   ├── test_inferencia.py
+│   └── test_priorizacion.py
 ├── .python-version
 ├── LICENSE
 ├── Makefile
@@ -162,7 +209,7 @@ solarguard-ai/
 └── uv.lock
 ```
 
-La estructura objetivo contempla separar la ingesta, el preprocesamiento, la inferencia, la priorización y la generación de tickets, además de incorporar pruebas automatizadas y una interfaz Streamlit.
+La estructura objetivo contempla separar la ingesta, el preprocesamiento, la inferencia, la priorización y la generación de tickets, además de incorporar pruebas automatizadas y una interfaz Streamlit. La priorización ya está implementada como módulo independiente y sin acoplamiento a ONNX Runtime.
 
 ## Plan de trabajo
 
