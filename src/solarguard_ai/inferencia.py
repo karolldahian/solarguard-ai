@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import time
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 from pathlib import Path
@@ -10,6 +11,8 @@ from typing import Any
 import numpy as np
 import onnxruntime as ort
 from numpy.typing import NDArray
+
+from .mlflow_tracking import is_enabled, log_prediction
 
 FloatTensor = NDArray[np.float32]
 
@@ -75,12 +78,35 @@ class SolarScanInference:
         cache_key = _tensor_cache_key(batch)
         cached_result = self._cache.get(cache_key)
         if cached_result is not None:
+            if is_enabled():
+                log_prediction(
+                    predicted_class=cached_result.predicted_class,
+                    confidence=cached_result.confidence,
+                    latency_ms=0.0,  # Cache hit = latencia ~0
+                    cache_hit=True,
+                    probabilities=cached_result.probabilities,
+                    model_path=str(self.model_path),
+                    confidence_threshold=self.confidence_threshold,
+                )
             return cached_result
 
+        start_time = time.perf_counter()
         probabilities = self._run_model(batch)[0]
+        latency_ms = (time.perf_counter() - start_time) * 1000
         result = _build_result(probabilities, self.confidence_threshold)
         # La clave usa el contenido y la forma: imágenes idénticas evitan inferencias repetidas.
         self._cache[cache_key] = result
+
+        if is_enabled():
+            log_prediction(
+                predicted_class=result.predicted_class,
+                confidence=result.confidence,
+                latency_ms=latency_ms,
+                cache_hit=False,
+                probabilities=result.probabilities,
+                model_path=str(self.model_path),
+                confidence_threshold=self.confidence_threshold,
+            )
         return result
 
     def predict_batch(self, tensors: Iterable[FloatTensor]) -> list[PredictionResult]:

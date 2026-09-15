@@ -18,6 +18,7 @@ Y no olvides tener corriendo el backend en otra terminal:
 
 from __future__ import annotations
 
+import time
 from io import BytesIO
 
 import grpc
@@ -34,6 +35,9 @@ from solarguard_ai.cliente_grpc import (
 
 # Validacion rapida de la imagen antes de enviarla (para un primer filtro)
 from solarguard_ai.ingesta import ImageIngestionError, load_image
+
+# MLflow tracking (opcional)
+from solarguard_ai.mlflow_tracking import is_enabled, log_streamlit_request
 
 # Personalizacion de la pagina
 st.set_page_config(
@@ -103,20 +107,48 @@ if archivo is not None:
 if archivo is not None and st.button("Clasificar panel", type="primary"):
     # El boton de Streamlit solo llama al servidor cuando se pulsa
     with st.spinner("Enviando imagen al backend y clasificando..."):
+        total_start = time.perf_counter()
+        network_start = time.perf_counter()
         try:
             # Creo el canal gRPC y hago la llamada remota
             canal = crear_canal(direccion)
+            network_latency_ms = (time.perf_counter() - network_start) * 1000
             resultado = clasificar_imagen(
                 canal,
                 bytes_imagen=archivo.getvalue(),
                 nombre=archivo.name,
                 tiempo_espera=TIEMPO_ESPERA,
             )
+            total_latency_ms = (time.perf_counter() - total_start) * 1000
             # Guardo el ticket junto con el nombre del archivo que lo origino,
             # asi no mostramos un resultado de una foto anterior.
             st.session_state["resultado_ticket"] = resultado
             st.session_state["resultado_de"] = archivo.name
+
+            # MLflow tracking desde Streamlit
+            if is_enabled():
+                cargada = load_image(BytesIO(archivo.getvalue()))
+                log_streamlit_request(
+                    panel_id=archivo.name,
+                    image_size=(cargada.width, cargada.height),
+                    image_format=cargada.format or "unknown",
+                    total_latency_ms=total_latency_ms,
+                    network_latency_ms=network_latency_ms,
+                    predicted_class=resultado["condicion"],
+                    confidence=resultado["confianza"],
+                    priority=resultado["prioridad"].lower(),
+                )
+
         except grpc.RpcError as error:
+            total_latency_ms = (time.perf_counter() - total_start) * 1000
+            if is_enabled():
+                log_streamlit_request(
+                    panel_id=archivo.name,
+                    image_size=(0, 0),
+                    image_format="unknown",
+                    total_latency_ms=total_latency_ms,
+                    error=error.details(),
+                )
             st.error(
                 "El backend devolvio un error. Verifica que este corriendo "
                 f"(detalle: {error.details()})."

@@ -180,6 +180,8 @@ El proyecto cuenta con un `Makefile` estandarizado para maximizar la productivid
 | `make streamlit`| Pipeline | Inicia la interfaz web en Streamlit (cuando esté lista en `main`). |
 | `make backend`  | Pipeline | Inicia el servidor de backend gRPC (cuando esté disponible). |
 | `make grpc-gen` | Pipeline | Regenera el código gRPC desde `proto/solarguard.proto`. |
+| `make mlflow-ui` | MLflow | Inicia la interfaz web de MLflow en puerto 5000. |
+| `make mlflow-clean` | Mantenimiento | Elimina runs locales de MLflow (`mlruns/`). |
 | `make clean`    | Mantenimiento | Elimina cachés locales (`__pycache__`, `.pytest_cache`, `.ruff_cache`). |
 
 ---
@@ -241,7 +243,77 @@ if ticket_result.status in {"created", "simulated"}:
 
 ---
 
-## 8. Alineación con la Rúbrica Académica (Módulo 3)
+## 8. MLflow Tracking (Observabilidad de Inferencia)
+
+SolarGuard AI incluye integración nativa con **MLflow** para trazabilidad completa de las inferencias. Cada predicción registra automáticamente:
+
+- **Latencia de inferencia** (ms) — end-to-end y por etapa (ingesta, preprocesamiento, ONNX, ticket)
+- **Confianza** — score del modelo (0.0–1.0)
+- **Clase predicha** — Clean, Dusty, Bird-drop, Electrical-damage, Physical-Damage, Snow-Covered, Unknown
+- **Probabilidades por clase** — distribución completa de softmax
+- **Cache hits** — si el resultado vino de la caché de tensores idénticos
+- **Revisión humana requerida** — flag cuando confianza < umbral operativo (0.70 default)
+- **Metadatos del request** — panel_id, tamaño/formato imagen, prioridad, estado ticket
+
+### 8.1. Inicio Rápido con MLflow
+
+1. **Iniciar servidor MLflow local:**
+   ```bash
+   make mlflow-ui
+   # Abre http://localhost:5000 en el navegador
+   ```
+
+2. **Ejecutar pipeline (backend + Streamlit):**
+   ```bash
+   # Terminal 1: backend gRPC
+   make backend
+
+   # Terminal 2: interfaz Streamlit
+   make streamlit
+   ```
+
+3. **Ver métricas en MLflow UI:** Cada clasificación crea un *run* con métricas, parámetros y tags.
+
+### 8.2. Configuración
+
+Variables de entorno (todas opcionales):
+
+| Variable | Default | Descripción |
+| :--- | :--- | :--- |
+| `MLFLOW_TRACKING_URI` | `http://localhost:5000` | URI del servidor MLflow |
+| `MLFLOW_EXPERIMENT` | `solarguard-inference` | Nombre del experimento |
+| `MLFLOW_ENABLED` | `true` | Activar/desactivar tracking |
+
+Archivo de configuración: `config/mlflow.toml`
+
+### 8.3. Uso Programático
+
+```python
+from solarguard_ai.mlflow_tracking import is_enabled, log_prediction, start_run
+
+# Verificar si MLflow está activo
+if is_enabled():
+    with start_run(run_name="mi-experimento") as run:
+        log_prediction(
+            predicted_class="Electrical-damage",
+            confidence=0.94,
+            latency_ms=42.5,
+            probabilities={"Electrical-damage": 0.94, "Physical-Damage": 0.06},
+            model_path="models/best.onnx",
+            confidence_threshold=0.7,
+            panel_id="PANEL-001",
+        )
+```
+
+### 8.4. Limpieza
+
+```bash
+make mlflow-clean  # Elimina directorio mlruns/
+```
+
+---
+
+## 9. Alineación con la Rúbrica Académica (Módulo 3)
 
 SolarGuard AI cumple rigurosamente con los criterios de evaluación del **Módulo 3: Aplicación Completa (25% de la nota final)**:
 
@@ -276,7 +348,8 @@ solarguard-ai/
 │   └── workflows/
 │       └── ci.yml                     # Pipeline de integración continua (GitHub Actions)
 ├── config/
-│   └── prioritization.toml            # Configuración de umbrales operativos de revisión
+│   ├── prioritization.toml            # Configuración de umbrales operativos de revisión
+│   └── mlflow.toml                    # Configuración de MLflow Tracking
 ├── docs/
 │   └── arquitectura.md                # Diagramas C4, contratos y especificación OpenAPI
 ├── proto/
@@ -295,6 +368,7 @@ solarguard-ai/
 │       ├── inferencia.py              # Servicio ONNX Runtime y caché de tensores
 │       ├── priorizacion.py            # Motor de reglas y prioridades operativas
 │       ├── tickets.py                 # Generación y despacho de tickets en GitHub Issues
+│       ├── mlflow_tracking.py         # Cliente MLflow y logging de métricas
 │       ├── servidor_grpc.py
 │       └── cliente_grpc.py
 ├── tests/
@@ -303,6 +377,7 @@ solarguard-ai/
 │   ├── test_inferencia.py             # Pruebas de sesiones ONNX, logits y caché
 │   ├── test_priorizacion.py           # Pruebas de matriz de severidad y umbrales
 │   ├── test_tickets.py                # Pruebas de formato, asignación y cliente GitHub
+│   ├── test_mlflow.py                 # Pruebas de MLflow tracking
 │   └── test_grpc.py                   # Pruebas de integración gRPC
 ├── app.py
 ├── .python-version                    # Definición estricta de Python 3.13

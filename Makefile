@@ -3,7 +3,7 @@
 # Especialización en Inteligencia Artificial — Universidad Autónoma de Occidente
 # ==============================================================================
 
-.PHONY: help status run streamlit backend install sync test check format clean lock-check compile gga gga-pr pre-commit pre-commit-install grpc-gen servidor
+.PHONY: help status run streamlit backend install sync test check format clean lock-check compile gga gga-pr pre-commit pre-commit-install grpc-gen servidor mlflow-ui mlflow-clean
 
 help:
 	@echo ====================================================================
@@ -16,6 +16,10 @@ help:
 	@echo   make backend      - Inicia el servidor backend gRPC (cuando este disponible)
 	@echo   make grpc-gen     - Regenera el codigo gRPC desde proto/solarguard.proto
 	@echo   make servidor     - Inicia el backend gRPC (alias de backend)
+	@echo --------------------------------------------------------------------
+	@echo [MLFLOW TRACKING]
+	@echo   make mlflow-ui    - Inicia la interfaz web de MLflow (puerto 5000)
+	@echo   make mlflow-clean - Elimina runs locales de MLflow (mlruns/)
 	@echo --------------------------------------------------------------------
 	@echo [CALIDAD Y HERRAMIENTAS]
 	@echo   make test         - Ejecuta suite completa de pruebas unitarias (Pytest)
@@ -114,3 +118,16 @@ clean:
 	@python -c "import pathlib, shutil; [shutil.rmtree(p, ignore_errors=True) for p in pathlib.Path('.').rglob('.ruff_cache')]"
 	@python -c "import pathlib, shutil; [shutil.rmtree(p, ignore_errors=True) for p in pathlib.Path('.').rglob('htmlcov')]"
 	@echo Limpieza completada exitosamente.
+
+# ------------------------------------------------------------------------------
+# MLflow Tracking
+# ------------------------------------------------------------------------------
+
+mlflow-ui:
+	@echo Iniciando MLflow UI en http://localhost:5000 ...
+	@uv run mlflow ui --host 0.0.0.0 --port 5000
+
+mlflow-clean:
+	@echo Limpiando runs locales de MLflow...
+	@python -c "import pathlib, shutil; [shutil.rmtree(p, ignore_errors=True) for p in pathlib.Path('.').rglob('mlruns')]"
+	@echo Limpieza de MLflow completada.
