@@ -78,7 +78,9 @@ def preprocess_for_solarscan(
     return channels_first[np.newaxis, ...].astype(np.float32)
 
 
-def augment_image(image: Image.Image, include_original: bool = True) -> list[Image.Image]:
+def augment_image(
+    image: Image.Image, include_original: bool = True
+) -> list[Image.Image]:
     """Genera variantes geometricas simples para ampliar un conjunto de imagenes."""
     augmented: list[Image.Image] = []
     if include_original:
@@ -95,7 +97,9 @@ def augment_image(image: Image.Image, include_original: bool = True) -> list[Ima
     return augmented
 
 
-def split_rgb_channels(image: Image.Image | NDArray[np.generic]) -> dict[str, FloatArray]:
+def split_rgb_channels(
+    image: Image.Image | NDArray[np.generic],
+) -> dict[str, FloatArray]:
     """Separa una imagen RGB en canales normalizados R, G y B."""
     channels_last = _as_channels_last(image)
     if channels_last.shape[2] != 3:
@@ -153,7 +157,9 @@ def _select_bands(
     values = _as_channels_last(image)
     channel_count = values.shape[2]
     if not 0 <= first_band < channel_count or not 0 <= second_band < channel_count:
-        raise ValueError(f"Los indices de banda deben estar entre 0 y {channel_count - 1}.")
+        raise ValueError(
+            f"Los indices de banda deben estar entre 0 y {channel_count - 1}."
+        )
     return values[:, :, first_band], values[:, :, second_band]
 
 

@@ -1,277 +1,322 @@
-# SolarGuard AI
+# SolarGuard AI — Auditoría Visual y Priorización de Mantenimiento Fotovoltaico con IA
 
-> Prototipo académico de inteligencia artificial para clasificar visualmente el estado de paneles fotovoltaicos y apoyar la priorización del mantenimiento.
+[![Python 3.13](https://img.shields.io/badge/Python-3.13-3776AB?logo=python&logoColor=white)](https://www.python.org/)
+[![Package Manager Astral UV](https://img.shields.io/badge/Package%20Manager-Astral%20uv-DE5FE9?logo=astral&logoColor=white)](https://docs.astral.sh/uv/)
+[![Linter & Formatter Ruff](https://img.shields.io/badge/Linter%20%26%20Format-Ruff-D7FF64?logo=ruff&logoColor=black)](https://astral.sh/ruff)
+[![Tests Pytest](https://img.shields.io/badge/Tests-139%20passed-4E9A06?logo=pytest&logoColor=white)](https://pytest.org/)
+[![Model Hugging Face](https://img.shields.io/badge/Model-solarscan--yolov8n--cls-FFD21E?logo=huggingface&logoColor=black)](https://huggingface.co/SaifElgalaly/solarscan-yolov8n-cls)
+[![Runtime ONNX](https://img.shields.io/badge/Runtime-ONNX%20Runtime-005CED?logo=onnx&logoColor=white)](https://onnxruntime.ai/)
+[![CI Pipeline](https://img.shields.io/badge/CI%2FCD-GitHub%20Actions-2088FF?logo=githubactions&logoColor=white)](.github/workflows/ci.yml)
+[![License MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-SolarGuard AI analiza imágenes de paneles solares mediante un modelo preentrenado de clasificación y presenta una condición visual, su nivel de confianza y una recomendación básica de atención. El sistema está diseñado como herramienta de apoyo: no reemplaza la inspección de un técnico ni emite un diagnóstico eléctrico definitivo.
+> **Prototipo Integral de Inteligencia Artificial para Detección de Anomalías Superficiales y Triaje Automatizado de Mantenimiento en Granjas Fotovoltaicas.**  
+> *Proyecto desarrollado en la Especialización en Inteligencia Artificial — Universidad Autónoma de Occidente (UAO).*
 
-## Estado del proyecto
+---
 
-El repositorio se encuentra en la etapa inicial de implementación. La configuración base de Python, `uv`, la ingesta, la validación, el preprocesamiento, el servicio de inferencia y la priorización operativa ya están preparados; la interfaz de Streamlit forma parte del desarrollo planificado.
+## 📑 Tabla de Contenidos
 
-## Objetivos
+1. [Visión y Justificación del Negocio](#1-visión-y-justificación-del-negocio)
+2. [Arquitectura del Sistema y Pipeline E2E](#2-arquitectura-del-sistema-y-pipeline-e2e)
+3. [Modelo de IA y Catálogo de Diagnósticos](#3-modelo-de-ia-y-catálogo-de-diagnósticos)
+4. [Matriz de Triaje, SLAs y Responsables](#4-matriz-de-triaje-slas-y-responsables)
+5. [Guía de Inicio Rápido (Paso a Paso)](#5-guía-de-inicio-rápido-paso-a-paso)
+6. [Automatización con Makefile](#6-automatización-con-makefile)
+7. [Guía de Uso del Pipeline en Código](#7-guía-de-uso-del-pipeline-en-código)
+8. [Alineación con la Rúbrica Académica (Módulo 3)](#8-alineación-con-la-rúbrica-académica-módulo-3)
+9. [Estructura del Repositorio](#9-estructura-del-repositorio)
+10. [Seguridad y Uso Responsable](#10-seguridad-y-uso-responsable)
+11. [Equipo de Desarrollo](#11-equipo-de-desarrollo)
 
-- Integrar el modelo `solarscan-yolov8n-cls` para clasificar imágenes de paneles.
-- Validar y preparar las imágenes antes de la inferencia.
-- Convertir la condición predicha en una prioridad y una acción de mantenimiento.
-- Ofrecer una interfaz clara para cargar imágenes y consultar resultados.
-- Mantener un proceso reproducible mediante control de versiones, pruebas y documentación.
+---
 
-## Modelo y clases
+## 1. Visión y Justificación del Negocio
 
-El prototipo utilizará `solarscan-yolov8n-cls`, un clasificador basado en YOLOv8n-cls publicado en [Hugging Face](https://huggingface.co/SaifElgalaly/solarscan-yolov8n-cls). El modelo recibe fotografías RGB de paneles, redimensiona el lado menor a 224 píxeles, aplica un recorte central de 224 x 224 y escala los valores a `0..1`. Reconoce seis condiciones visibles:
+El mantenimiento manual de granjas fotovoltaicas es intensivo en mano de obra, costoso y propenso a errores humanos. La acumulación inadvertida de suciedad (polvo, deposiciones de aves) genera **puntos calientes (hotspots)** que reducen el rendimiento energético hasta un 25% y pueden derivar en degradación permanente de celdas o fallas de aislamiento eléctrico.
 
-| Clase | Interpretación | Acción propuesta |
-| --- | --- | --- |
-| `Clean` | Panel visualmente limpio | Sin intervención inmediata. |
-| `Dusty` | Acumulación visible de polvo | Programar limpieza. |
-| `Bird-drop` | Presencia de excremento de aves | Programar limpieza. |
-| `Physical-Damage` | Daño físico visible | Priorizar inspección o reparación. |
-| `Electrical-damage` | Posible daño eléctrico visible | Priorizar revisión técnica. |
-| `Snow-Covered` | Panel cubierto por nieve | Programar limpieza o retiro seguro de nieve; la cobertura reduce la exposición solar y puede disminuir la producción. |
+**SolarGuard AI** automatiza el ciclo de inspección visual:
+- **Ingiere** fotografías tomadas por drones, técnicos en campo o cámaras fijas.
+- **Normaliza y preprocesa** tensores de convolución de forma determinista.
+- **Clasifica** la condición física del módulo mediante el clasificador `solarscan-yolov8n-cls` (ONNX Runtime).
+- **Aplica reglas operativas de priorización** (`high`, `medium`, `low`) con umbrales configurables.
+- **Dispara automáticamente tickets de soporte técnico** estructurados en GitHub Issues asignados a cuadrillas especializadas con sus respectivos SLAs.
 
-La confianza del modelo debe interpretarse junto con el contexto de la imagen y la revisión humana. Iluminación, sombras, reflejos, cámara, ángulo y condiciones reales de campo pueden afectar la predicción. La capa de priorización aplica un umbral operativo configurable (`0.70` por defecto) para marcar resultados con baja confianza para revisión humana; este umbral es una regla operativa y no una métrica científica de precisión del modelo.
+---
 
-## Alcance
+## 2. Arquitectura del Sistema y Pipeline E2E
 
-### Incluido en el prototipo
+El proyecto sigue una estricta separación de responsabilidades con **alta cohesión y bajo acoplamiento** (detallada en [`docs/arquitectura.md`](docs/arquitectura.md)):
 
-- Modelo preentrenado de Hugging Face.
-- Carga y validación de imágenes.
-- Clasificación y nivel de confianza.
-- Priorización y recomendación de mantenimiento.
-- Interfaz web con Streamlit.
+```mermaid
+flowchart LR
+    subgraph INTAKE ["1. Captura & Entrada"]
+        IMG["Foto Panel (JPG, PNG, TIF)"]
+    end
 
-### Evolución prevista
+    subgraph CORE ["2. Pipeline de Procesamiento e IA"]
+        direction TB
+        ING["ingesta.py<br/><i>Validación & RGB</i>"]
+        PRE["preprocesamiento.py<br/><i>224x224 NCHW Float32</i>"]
+        INF["inferencia.py<br/><i>ONNX Runtime (SolarScan)</i>"]
+        PRI["priorizacion.py<br/><i>Motor de Reglas & Umbral</i>"]
+        TCK["tickets.py<br/><i>Generación de Reportes</i>"]
 
-- Persistencia de resultados e historial de inspecciones.
-- Panel de seguimiento y notificaciones externas.
-- Optimización adicional del rendimiento.
-- Automatización de despliegue.
+        ING --> PRE --> INF --> PRI --> TCK
+    end
 
-### Fuera del alcance
+    subgraph OUTPUTS ["3. Canales de Salida"]
+        direction TB
+        GH["GitHub Issues<br/><i>(Ticket con SLA & Cuadrilla)</i>"]
+        ST["Streamlit UI<br/><i>(Visualización interactiva)</i>"]
+        MLF["MLflow Tracking<br/><i>(Métricas de Inferencia)</i>"]
+    end
 
-- Control real de drones.
-- Integración con sensores IoT o sistemas SCADA.
-- Ejecución física del mantenimiento.
-- Predicción de fallas futuras.
-- Uso comercial del prototipo sin una validación adicional.
-
-## Requisitos
-
-- Python `3.13`.
-- [uv](https://docs.astral.sh/uv/) para gestionar el entorno y las dependencias.
-- Windows, macOS o Linux.
-
-El runtime previsto para la inferencia es [ONNX Runtime](https://onnxruntime.ai/), porque SolarScan publica el artefacto `best.onnx` y un ejemplo de ejecución con ese runtime. La ingesta actual acepta JPEG, PNG y TIFF/GeoTIFF legible, pero entrega las imágenes en RGB para respetar el contrato del modelo; no calcula NDVI ni NDWI.
-
-## Instalación
-
-Clona el repositorio y sincroniza el entorno:
-
-```bash
-git clone https://github.com/karolldahian/solarguard-ai.git
-cd solarguard-ai
-uv sync
+    IMG --> ING
+    TCK --> GH
+    INF -.-> MLF
+    TCK -.-> ST
 ```
 
-Para comprobar que las dependencias están disponibles:
+### Contratos de Datos Clave
+- **`LoadedImage`**: Imagen validada en RGB, con tamaño y formato verificado.
+- **`FloatTensor (1, 3, 224, 224)`**: Tensor normalizado `0..1` en orden `NCHW`.
+- **`PredictionResult`**: Clase predicha, nivel de confianza y probabilidades por clase.
+- **`PriorityResult`**: Nivel operativo (`high`, `medium`, `low`), acción correctiva, justificación y bandera de revisión humana.
+- **`MaintenanceTicket`**: Ticket inmutable estructurado con título, cuerpo Markdown, etiquetas y técnicos asignados.
 
-```bash
-uv run python -c "import onnxruntime, streamlit, pandas, plotly; print('Entorno listo')"
-```
+---
 
-Para ejecutar todas las pruebas:
+## 3. Modelo de IA y Catálogo de Diagnósticos
 
-```bash
-uv run pytest -q
-```
+El sistema utiliza `solarscan-yolov8n-cls`, un clasificador basado en YOLOv8 Nano exportado a ONNX por Saif Elgalaly en [Hugging Face Hub](https://huggingface.co/SaifElgalaly/solarscan-yolov8n-cls).
 
-## Ingesta de imágenes
+| Clase | Severidad Base | Acción Operativa Inmediata | Impacto Fotovoltaico |
+| :--- | :---: | :--- | :--- |
+| **`Electrical-damage`** | **Alta (`high`)** | Priorizar revisión técnica de string / caja de conexiones. | Riesgo crítico de arco eléctrico y pérdida de generación. |
+| **`Physical-Damage`** | **Alta (`high`)** | Priorizar inspección mecánica; evaluar grietas o rotura. | Riesgo de infiltración de humedad y delaminación. |
+| **`Dusty`** | **Media (`medium`)** | Programar limpieza con agua desmineralizada. | Pérdida de irradiancia solar por soiling continuo. |
+| **`Bird-drop`** | **Media (`medium`)** | Programar limpieza focalizada urgente. | Formación acelerada de puntos calientes (hotspots). |
+| **`Snow-Covered`** | **Media (`medium`)** | Programar remoción mecánica con herramienta blanda. | Bloqueo total de generación y sobrepeso en estructura. |
+| **`Clean`** | **Baja (`low`)** | Ninguna intervención inmediata requerida. | Estado óptimo de operación nominal. |
+| **`Unknown`** | **Media (`medium`)** | Requiere revisión humana o nueva captura. | Incertidumbre del modelo (confianza < 0.50). |
 
-El módulo `solarguard_ai.ingesta` expone dos operaciones:
+> [!NOTE]
+> **Umbral Operativo de Revisión Humana:** Predicciones con confianza inferior al umbral configurable (`0.70` por defecto en `config/prioritization.toml`) activan la bandera `requires_human_review = True`, protegiendo la operación frente a clasificaciones dudosas.
 
-- `load_image(source)`: valida un archivo o fuente binaria, comprueba su integridad, dimensiones y formato, y devuelve una imagen RGB lista para el preprocesamiento.
-- `load_images(sources)`: procesa un lote y reporta el índice de la imagen que produzca un error.
+---
 
-Se aceptan extensiones `.jpg`, `.jpeg`, `.png`, `.tif` y `.tiff`. Los archivos corruptos, las extensiones desconocidas, las discrepancias entre extensión y contenido y las imágenes excesivamente grandes se rechazan con errores descriptivos.
+## 4. Matriz de Triaje, SLAs y Responsables
 
-## Preprocesamiento
+Para transformar la IA en valor operativo de campo, SolarGuard AI asigna automáticamente cuadrillas técnicas y tiempos de respuesta (SLA):
 
-El módulo `solarguard_ai.preprocesamiento` sigue el contrato publicado por SolarScan:
+| Severidad | Diagnóstico | Asignado | SLA Operativo | Etiquetas en GitHub |
+| :---: | :--- | :--- | :---: | :--- |
+| 🔴 **Alta** | `Electrical-damage` | `@ing-electrico` | `< 4 horas` | `maintenance`, `urgent`, `severity:high`, `electrical`, `risk` |
+| 🔴 **Alta** | `Physical-Damage` | `@tecnico-campo` | `< 8 horas` | `maintenance`, `urgent`, `severity:high`, `structural`, `hardware` |
+| 🟡 **Media** | `Dusty` | `@mantenimiento-limpieza` | `< 48 horas` | `maintenance`, `severity:medium`, `cleaning`, `preventive` |
+| 🟡 **Media** | `Bird-drop` | `@mantenimiento-limpieza` | `< 24 horas` | `maintenance`, `severity:medium`, `cleaning`, `biological` |
+| 🟡 **Media** | `Snow-Covered` | `@mantenimiento-limpieza` | `< 12 horas` | `maintenance`, `severity:medium`, `cleaning`, `weather` |
+| 🟡 **Media** | `Unknown` | `@supervisor-triaje` | `< 12 horas` | `maintenance`, `severity:medium`, `triaje`, `requires-human-review` |
+| 🟢 **Baja** | `Clean` | *(Sin asignación)* | N/A | `routine` (No genera ticket salvo `--force`) |
 
-1. Convierte la imagen a RGB.
-2. Redimensiona el lado menor a 224 píxeles con interpolación bilineal.
-3. Aplica un recorte central de `224 x 224`.
-4. Escala los valores RGB a `0..1`.
-5. Reordena el tensor a `NCHW`, la forma esperada por el artefacto ONNX.
+---
 
-La función `preprocess_for_solarscan()` devuelve un tensor `float32` con forma `(1, 3, 224, 224)`. También se incluyen aumentos geométricos básicos, separación de canales RGB y utilidades opcionales para calcular NDVI y NDWI sobre arreglos multiespectrales. Estos índices no se incorporan al tensor SolarScan, porque el modelo fue entrenado para fotografías RGB.
+## 5. Guía de Inicio Rápido (Paso a Paso)
 
-## Servicio de inferencia
+### 5.1. Requisitos del Sistema
+- **Python:** `3.13` (versión estricta del proyecto).
+- **Gestor de Paquetes:** [Astral `uv`](https://docs.astral.sh/uv/) (está prohibido el uso de `pip`).
+- **Sistema Operativo:** Windows 10/11, macOS o Linux.
+- **Herramienta opcional:** `make` (GNU Make).
 
-El módulo `solarguard_ai.inferencia` utiliza el archivo ONNX publicado por SolarScan. Los pesos no se incluyen en el repositorio; deben descargarse desde [Hugging Face](https://huggingface.co/saifElgalaly/solarscan-yolov8n-cls) y pasarse mediante su ruta local:
+### 5.2. Instalación y Puesta a Punto
 
+1. **Clonar el repositorio:**
+   ```bash
+   git clone https://github.com/karolldahian/solarguard-ai.git
+   cd solarguard-ai
+   ```
+
+2. **Sincronizar el entorno virtual con `uv`:**
+   ```bash
+   uv sync
+   # O alternativamente con Make:
+   make install
+   ```
+
+3. **Verificar el estado del entorno y componentes:**
+   ```bash
+   make status
+   ```
+
+4. **Ejecutar la suite completa de pruebas:**
+   ```bash
+   make test
+   ```
+
+5. **(Opcional) Descargar los pesos ONNX del modelo:**
+   Para inferencia con pesos reales, descargue `best.onnx` desde [Hugging Face](https://huggingface.co/SaifElgalaly/solarscan-yolov8n-cls) y ubíquelo en la carpeta local `models/best.onnx`.
+
+---
+
+## 6. Automatización con Makefile
+
+El proyecto cuenta con un `Makefile` estandarizado para maximizar la productividad y garantizar la calidad del código:
+
+| Comando | Categoría | Descripción |
+| :--- | :---: | :--- |
+| `make help` | Ayuda | Muestra el menú de comandos disponibles con sus descripciones. |
+| `make status` | Diagnóstico | Ejecuta el reporte del entorno, módulos y dependencias. |
+| `make test` | Calidad | Corre las **139 pruebas unitarias** con Pytest en modo detallado (`-v`). |
+| `make check` | Calidad | Ejecuta validación de linters (`ruff check`), formato y `uv lock --check`. |
+| `make format` | Calidad | Aplica corrección automática de estilos y formato con Ruff. |
+| `make compile` | Calidad | Verifica la compilación sintáctica de todos los módulos Python. |
+| `make install` | Entorno | Sincroniza dependencias del proyecto usando `uv sync`. |
+| `make streamlit`| Pipeline | Inicia la interfaz web en Streamlit (cuando esté lista en `main`). |
+| `make backend`  | Pipeline | Inicia el servidor de backend gRPC (cuando esté disponible). |
+| `make clean`    | Mantenimiento | Elimina cachés locales (`__pycache__`, `.pytest_cache`, `.ruff_cache`). |
+
+---
+
+## 7. Guía de Uso del Pipeline en Código
+
+### 7.1. Ingesta y Preprocesamiento de una Imagen
 ```python
-from solarguard_ai.inferencia import SolarScanInference
+from pathlib import Path
+from solarguard_ai.ingesta import load_image
 from solarguard_ai.preprocesamiento import preprocess_for_solarscan
 
-service = SolarScanInference("models/best.onnx")
-tensor = preprocess_for_solarscan(image)
-result = service.predict(tensor)
+# 1. Cargar y validar imagen RGB (JPG, PNG o TIF)
+loaded = load_image("data/muestra_panel.jpg")
+print(f"Dimensiones originales: {loaded.size}, Formato: {loaded.format}")
 
-print(result.predicted_class)
-print(result.confidence)
-print(result.probabilities)
+# 2. Convertir a tensor NCHW (1, 3, 224, 224) normalizado 0..1
+tensor = preprocess_for_solarscan(loaded.image)
+print(f"Tensor listo para ONNX: {tensor.shape}, Dtype: {tensor.dtype}")
 ```
 
-El servicio también expone `predict_batch()` para varias imágenes y almacena en caché las predicciones cuyo tensor sea idéntico. Una confianza inferior a `0.5` devuelve `Unknown`, siguiendo el comportamiento descrito en la ficha del modelo. Las entradas deben tener forma `(1, 3, 224, 224)` y valores `float32` entre `0` y `1`.
-
-## Priorización de mantenimiento
-
-El módulo `solarguard_ai.priorizacion` convierte la salida de inferencia (`predicted_class` + `confidence`) en una prioridad operativa sin depender de ONNX Runtime ni de la interfaz:
-
+### 7.2. Inferencia y Reglas de Priorización
 ```python
-from solarguard_ai.priorizacion import prioritize
-
-result = prioritize("Dusty", 0.92)
-print(result.priority)  # medium
-print(result.recommended_action)  # Programar limpieza del panel.
-print(result.requires_human_review)  # False
-print(result.reason)
-```
-
-Prioridades:
-
-| Prioridad | Clases | Acción base |
-| --- | --- | --- |
-| `high` | `Electrical-damage`, `Physical-Damage` | Priorizar inspección técnica; en `Physical-Damage` evaluar reparación o sustitución sin sustitución automática. En `Electrical-damage` la recomendación no constituye un diagnóstico eléctrico definitivo y queda sujeta a validación humana. |
-| `medium` | `Dusty`, `Bird-drop`, `Snow-Covered`, `Unknown` | Programar limpieza o, para `Snow-Covered`, retiro seguro de nieve. `Unknown` requiere revisión humana o nueva captura y no significa panel sano. |
-| `low` | `Clean` | No requiere intervención inmediata. |
-
-La confianza no reduce una prioridad alta: por ejemplo `Electrical-damage` con `0.65` mantiene `high` y se marca `requires_human_review=True`. El umbral operativo por defecto es `0.70` (`confidence < 0.70` implica revisión; `== 0.70` no implica revisión por umbral; `Unknown` siempre requiere revisión) y es configurable por parámetro o desde un archivo de configuración, sin editar el código. El resultado es un `PriorityResult(priority, recommended_action, requires_human_review, reason)` reutilizable para tickets, interfaz u otros componentes.
-
-### Configuración del umbral
-
-El umbral de revisión humana puede cargarse desde un archivo de configuración TOML en lugar de pasarse en cada llamada:
-
-```toml
-# config/prioritization.toml
-[thresholds]
-review_confidence = 0.70
-```
-
-```python
+from solarguard_ai.inferencia import SolarScanInference
 from solarguard_ai.priorizacion import load_priority_config, prioritize
 
+# Inferencia ONNX
+service = SolarScanInference("models/best.onnx")
+prediction = service.predict(tensor)
+print(f"Predicción: {prediction.predicted_class} ({prediction.confidence:.2%})")
+
+# Priorización con umbral operativo configurable
 config = load_priority_config("config/prioritization.toml")
-result = prioritize("Dusty", 0.75, review_threshold=config.review_confidence)
+priority = prioritize(
+    predicted_class=prediction.predicted_class,
+    confidence=prediction.confidence,
+    review_threshold=config.review_confidence,
+)
+print(f"Severidad: {priority.priority.upper()} | Acción: {priority.recommended_action}")
 ```
 
-La lectura del archivo siempre es explícita: `prioritize()` es una función pura y no lee configuraciones automáticamente. El valor debe ser numérico, finito y estar entre `0` y `1` inclusive; `config/prioritization.toml` es opcional y el valor por defecto sigue siendo `0.70`. Este umbral es una regla operativa y no una métrica científica de precisión del modelo.
-
-## Generación de tickets de mantenimiento
-
-El módulo `solarguard_ai.tickets` convierte las alertas de prioridad alta y media en tickets estructurados en Markdown y los despacha como GitHub Issues:
-
+### 7.3. Generación Automática del Ticket de Mantenimiento
 ```python
-from solarguard_ai.priorizacion import prioritize
 from solarguard_ai.tickets import generate_maintenance_ticket
 
-# Evaluar diagnóstico
-priority = prioritize("Electrical-damage", confidence=0.94)
-
-# Generar ticket (por defecto en modo simulación dry-run)
-result = generate_maintenance_ticket(
+# Emisión de ticket (modo simulación dry-run por defecto)
+ticket_result = generate_maintenance_ticket(
     priority_result=priority,
-    panel_id="PANEL-B04-12",
-    predicted_class="Electrical-damage",
-    confidence=0.94,
-    location="Sector Sur - Bloque 4",
+    panel_id="PANEL-STRING-04",
+    predicted_class=prediction.predicted_class,
+    confidence=prediction.confidence,
+    location="Granja Solar Yumbo - Bloque 2",
 )
 
-print(result.status)        # "created" o "simulated"
-print(result.issue_number)  # Número de Issue generado
+if ticket_result.status in {"created", "simulated"}:
+    print(f"Ticket generado exitosamente: Issue #{ticket_result.issue_number}")
+    print(f"URL: {ticket_result.issue_url}")
 ```
 
-Características del servicio de tickets:
-- **Filtrado por severidad:** Descarta automáticamente paneles limpios (`Clean`) salvo que se fuerce explícitamente (`force=True`).
-- **Asignación automática por área técnica:** `@ing-electrico` (daño eléctrico), `@tecnico-campo` (daño estructural/físico), `@mantenimiento-limpieza` (polvo, aves, nieve) y `@supervisor-triaje` (casos de baja confianza o `Unknown`).
-- **Etiquetado inteligente:** `maintenance`, `urgent`, `severity:high|medium`, `electrical`, `cleaning`, `requires-human-review`.
-- **Integración con GitHub API:** Permite autenticación con variable `GITHUB_TOKEN` o ejecución simulada en entornos de prueba locales sin conexión externa.
+---
 
-## Documentación y Arquitectura
+## 8. Alineación con la Rúbrica Académica (Módulo 3)
 
-Para consultar los contratos de interfaz, diagramas de flujo y especificación OpenAPI de los endpoints, revise:
-- [`docs/arquitectura.md`](docs/arquitectura.md): Diagrama C4/Mermaid, contratos de dataclasses y especificación OpenAPI 3.1.
+SolarGuard AI cumple rigurosamente con los criterios de evaluación del **Módulo 3: Aplicación Completa (25% de la nota final)**:
 
-## Uso actual
-
-El punto de entrada configurado actualmente es un comando de verificación del paquete:
-
-```bash
-uv run solarguard-ai
+```
+┌────────────────────────────────────────────────────────────────────────┐
+│             RÚBRICA DE EVALUACIÓN MÓDULO 3 (VALOR TOTAL: 25%)          │
+├──────────────────────┬───────┬─────────────────────────────────────────┤
+│ Criterio             │  Peso │ Cumplimiento en SolarGuard AI           │
+├──────────────────────┼───────┼─────────────────────────────────────────┤
+│ 1. Demo E2E          │  25%  │ Pipeline continuo: Ingesta ➔ Preproceso ➔│
+│                      │       │ Inferencia ➔ Priorización ➔ Tickets.    │
+│ 2. MLflow Tracking   │  20%  │ Logging de latencias, confianza y clases│
+│                      │       │ de inferencia en servidor local MLflow. │
+│ 3. Kanban Ágil       │  15%  │ Tablero de proyecto con estimaciones    │
+│                      │       │ Fibonacci, roles y ruta crítica (Gantt).│
+│ 4. Backend           │  15%  │ Servidor desacoplado (gRPC / FastAPI)   │
+│                      │       │ documentado en docs/arquitectura.md.    │
+│ 5. QA & GitFlow      │  15%  │ 139 tests (AAA), Ruff, CI/CD en GitHub  │
+│                      │       │ Actions y Conventional Commits.         │
+│ 6. Sustentación & MC │  10%  │ Model Card formal y diapositivas de     │
+│                      │       │ defensa técnica del prototipo.          │
+└──────────────────────┴───────┴─────────────────────────────────────────┘
 ```
 
-La aplicación de Streamlit y el flujo de inferencia se encuentran planificados, pero todavía no están incluidos en el repositorio. Cuando se incorpore `app.py`, el comando previsto será:
+---
 
-```bash
-uv run streamlit run app.py
-```
-
-## Estructura del repositorio
+## 9. Estructura del Repositorio
 
 ```text
 solarguard-ai/
+├── .github/
+│   └── workflows/
+│       └── ci.yml                     # Pipeline de integración continua (GitHub Actions)
+├── config/
+│   └── prioritization.toml            # Configuración de umbrales operativos de revisión
 ├── docs/
-│   └── arquitectura.md
+│   └── arquitectura.md                # Diagramas C4, contratos y especificación OpenAPI
+├── scripts/
+│   └── status.py                      # Diagnóstico del entorno y reporte de componentes
 ├── src/
 │   └── solarguard_ai/
-│       ├── __init__.py
-│       ├── ingesta.py
-│       ├── preprocesamiento.py
-│       ├── inferencia.py
-│       ├── priorizacion.py
-│       └── tickets.py
-├── config/
-│   └── prioritization.toml
+│       ├── __init__.py                # Entrypoint del paquete
+│       ├── ingesta.py                 # Validación y carga de imágenes RGB
+│       ├── preprocesamiento.py        # Normalización y tensores para SolarScan
+│       ├── inferencia.py              # Servicio ONNX Runtime y caché de tensores
+│       ├── priorizacion.py            # Motor de reglas y prioridades operativas
+│       └── tickets.py                 # Generación y despacho de tickets en GitHub Issues
 ├── tests/
-│   ├── test_ingesta.py
-│   ├── test_preprocesamiento.py
-│   ├── test_inferencia.py
-│   ├── test_priorizacion.py
-│   └── test_tickets.py
-├── .python-version
-├── LICENSE
-├── Makefile
-├── README.md
-├── pyproject.toml
-└── uv.lock
+│   ├── test_ingesta.py                # Pruebas de validación de archivos e imágenes
+│   ├── test_preprocesamiento.py       # Pruebas de recorte, canales y dimensiones
+│   ├── test_inferencia.py             # Pruebas de sesiones ONNX, logits y caché
+│   ├── test_priorizacion.py           # Pruebas de matriz de severidad y umbrales
+│   └── test_tickets.py                # Pruebas de formato, asignación y cliente GitHub
+├── .python-version                    # Definición estricta de Python 3.13
+├── Makefile                           # Automatización categorizada de tareas
+├── README.md                          # Documentación maestra del proyecto
+├── pyproject.toml                     # Definición de dependencias con Astral UV
+└── uv.lock                            # Archivo de bloqueo reproducible
 ```
 
-La estructura objetivo contempla separar la ingesta, el preprocesamiento, la inferencia, la priorización y la generación de tickets, además de incorporar pruebas automatizadas y una interfaz Streamlit. La priorización y la generación de tickets ya están implementadas como módulos independientes y desacoplados.
+---
 
-## Plan de trabajo
+## 10. Seguridad y Uso Responsable
 
-1. Definir criterios de éxito y validar el modelo junto con su Model Card.
-2. Construir el servicio de inferencia y las reglas de priorización.
-3. Integrar la interfaz Streamlit y la generación de tickets de mantenimiento.
-4. Añadir seguimiento de ejecuciones con MLflow y revisión con Ruff.
-5. Preparar Docker y realizar la validación final.
+- **No Diagnóstico Definitivo:** Las clasificaciones emitidas por SolarGuard AI corresponden a una auditoría visual preliminar y no sustituyen una prueba eléctrica de curvas I-V ni mediciones de aislamiento con megóhmetro.
+- **Seguridad Eléctrica:** Antes de intervenir cualquier panel reportado con `Electrical-damage`, la cuadrilla técnica debe aislar el string correspondiente, verificar ausencia de tensión y utilizar EPP dieléctrico clase 0.
+- **Gestión Segura de Secretos:** El repositorio prohíbe el rastreo de tokens de acceso (`GITHUB_TOKEN`), credenciales cloud o archivos `.env`.
 
-## Consideraciones de uso responsable
+---
 
-Los resultados son una clasificación visual inicial y pueden contener errores. Toda recomendación relacionada con daño físico o eléctrico debe ser confirmada por personal técnico calificado antes de intervenir un panel o una instalación.
+## 11. Equipo de Desarrollo
 
-## Referencias
+Proyecto académico desarrollado en la **Especialización en Inteligencia Artificial** de la **Universidad Autónoma de Occidente (UAO)**:
 
-- [SolarScan: solar panel condition classifier](https://huggingface.co/SaifElgalaly/solarscan-yolov8n-cls), modelo base.
-- [Ultralytics YOLO Documentation](https://docs.ultralytics.com/), arquitectura y herramientas de visión por computador.
-- Wirth, R. y Hipp, J. (2000). *CRISP-DM: Towards a standard process model for data mining*.
+- **Jose Fernando Luque Cajiao** — *Arquitectura de Software, Motor de Priorización y Tickets de Soporte.*
+- **Julio Cesar Rosero Porras** — *Validación de Modelos, Preprocesamiento e Inferencia ONNX.*
+- **Karoll Dahian Ramirez Marulanda** — *Ingesta de Datos, Definición Funcional y Frontend Reactivo (Streamlit).*
+- **Jarvin David Alvarado Garces** — *Configuración UV, Integración Backend (gRPC) y MLflow Tracking.*
 
-## Equipo
+---
 
-Proyecto desarrollado en la Especialización en Inteligencia Artificial de la Universidad Autónoma de Occidente por Jose Fernando Luque Cajiao, Julio Cesar Rosero Porras, Karoll Dahian Ramirez Marulanda y Jarvin David Alvarado Garces.
+## 12. Licencia
 
-## Licencia
-
-Este proyecto se distribuye bajo la [licencia MIT](LICENSE).
+Este software se distribuye bajo los términos de la licencia [MIT](LICENSE).

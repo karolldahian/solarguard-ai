@@ -2,14 +2,15 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from dataclasses import dataclass
 from io import BytesIO
 from pathlib import Path
-from typing import BinaryIO, Iterable, TypeAlias
+from typing import BinaryIO
 
 from PIL import Image, UnidentifiedImageError
 
-ImageSource: TypeAlias = str | Path | BinaryIO
+type ImageSource = str | Path | BinaryIO
 
 _SUPPORTED_EXTENSIONS = {
     ".jpg": "JPEG",
@@ -168,4 +169,10 @@ def _validate_channels(source_name: str, channels: int) -> None:
         )
 
 
-__all__ = ["ImageIngestionError", "LoadedImage", "ImageSource", "load_image", "load_images"]
+__all__ = [
+    "ImageIngestionError",
+    "ImageSource",
+    "LoadedImage",
+    "load_image",
+    "load_images",
+]

@@ -1,0 +1,54 @@
+name: CI - Quality & Testing Pipeline
+
+on:
+  push:
+    branches:
+      - main
+      - feat/*
+      - fix/*
+      - chore/*
+      - issue-*
+  pull_request:
+    branches:
+      - main
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  quality-and-tests:
+    name: Lint, Format & Tests (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          version: "latest"
+          enable-cache: true
+
+      - name: Set up Python 3.13
+        run: uv python install 3.13
+
+      - name: Verify uv lock synchronization
+        run: uv lock --check
+
+      - name: Install dependencies
+        run: uv sync --dev
+
+      - name: Run Ruff Linter
+        run: uv run ruff check .
+
+      - name: Verify Ruff Code Formatting
+        run: uv run ruff format --check .
+
+      - name: Run Pytest Test Suite
+        run: uv run pytest -v
