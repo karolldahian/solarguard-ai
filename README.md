@@ -45,7 +45,7 @@ El mantenimiento manual de granjas fotovoltaicas es intensivo en mano de obra, c
 
 ## 2. Arquitectura del Sistema y Pipeline E2E
 
-El proyecto sigue una estricta separación de responsabilidades con **alta cohesión y bajo acoplamiento** (detallada en [`docs/arquitectura.md`](docs/arquitectura.md)):
+El proyecto sigue una estricta separación de responsabilidades con **alta cohesión y bajo acoplamiento** (detallada en el modelo interactivo de [Archify `docs/arquitectura.html`](docs/arquitectura.html) y en [`docs/arquitectura.md`](docs/arquitectura.md)):
 
 ```mermaid
 flowchart LR
@@ -270,6 +270,7 @@ SolarGuard AI cumple rigurosamente con los criterios de evaluación del **Módul
 
 ```text
 solarguard-ai/
+├── Dockerfile                         # Contenedorización de la aplicación completa
 ├── .github/
 │   └── workflows/
 │       └── ci.yml                     # Pipeline de integración continua (GitHub Actions)
