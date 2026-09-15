@@ -150,7 +150,8 @@ class SolarGuardServicio(solarguard_pb2_grpc.SolarGuardServicioServicer):
             confianza=ticket.confidence,
             descripcion=ticket.body.split("### 2. Acción Requerida")[0]
             .split("**Diagnóstico Visual**")[1]
-            .split("|")[2]
+            .split("|")[1]
+            .replace("`", "")
             .strip()
             if "**Diagnóstico Visual**" in ticket.body
             else ticket.predicted_class,

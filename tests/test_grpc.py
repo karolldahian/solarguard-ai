@@ -24,11 +24,11 @@ from PIL import Image
 # Funciones del servidor y del cliente
 from solarguard_ai.cliente_grpc import clasificar_imagen, verificar_servidor
 from solarguard_ai.grpc_interface import solarguard_pb2, solarguard_pb2_grpc
-from solarguard_ai.inferencia import CLASES, predecir
+from solarguard_ai.inferencia import CLASS_NAMES
 from solarguard_ai.servidor_grpc import _construir_servidor
 
 # Prioridades validas que puede devolver un ticket (mismo set que tickets.py)
-PRIORIDADES_VALIDAS = {"Critica", "Alta", "Media", "Baja"}
+PRIORIDADES_VALIDAS = {"high", "medium", "low"}
 
 
 # ---------------------------------------------------------------------------
@@ -45,15 +45,36 @@ def crear_imagen_bytes(ancho: int = 640, alto: int = 480) -> bytes:
 
 
 @pytest.fixture()
-def backend_grpc():
+def backend_grpc(monkeypatch, tmp_path):
     """
     Levanta un backend gRPC 'de juguete' para las pruebas.
-
-    Aprendi que la forma comoda es arrancar el servidor en un puerto
-    efimero (puerto 0 = "elige uno libre") dentro de esta prueba y
-    conectarnos a el, y al terminar apagarlo. Asi las pruebas no
-    necesitan que el usuario tenga el backend corriendo aparte.
     """
+    import numpy as np
+
+    from solarguard_ai.inferencia import SolarScanInference
+
+    class FakeInput:
+        name = "images"
+
+    class FakeSession:
+        def get_inputs(self):
+            return [FakeInput()]
+
+        def run(self, _outputs, _inputs):
+            # Simulamos que predice la primera clase con alta confianza
+            return [np.array([[0.8, 0.04, 0.04, 0.04, 0.04, 0.04]], dtype=np.float32)]
+
+    def factory(_path):
+        return FakeSession()
+
+    model_path = tmp_path / "best.onnx"
+    model_path.write_bytes(b"fake")
+    fake_service = SolarScanInference(model_path, session_factory=factory)
+
+    monkeypatch.setattr(
+        "solarguard_ai.servidor_grpc._get_inference_client", lambda: fake_service
+    )
+
     servidor = _construir_servidor()
 
     # add_insecure_port devuelve el numero de puerto que toco
@@ -107,7 +128,7 @@ def test_clasificar_imagen_devuelve_ticket_completo(backend_grpc) -> None:
     }
 
     # La condicion debe ser una de las 6 clases del modelo
-    assert resultado["condicion"] in CLASES
+    assert resultado["condicion"] in CLASS_NAMES
 
     # La confianza debe estar entre 0.0 y 1.0
     assert 0.0 <= resultado["confianza"] <= 1.0
@@ -174,51 +195,3 @@ def test_misma_imagen_siempre_da_misma_clasificacion(backend_grpc) -> None:
 
     assert primer_resultado["condicion"] == segundo_resultado["condicion"]
     assert primer_resultado["confianza"] == segundo_resultado["confianza"]
-
-
-# ---------------------------------------------------------------------------
-# Pruebas de la simulacion de inferencia
-# ---------------------------------------------------------------------------
-
-
-def test_predecir_usa_la_semilla_de_forma_determinista() -> None:
-    """
-    predecir() con la misma semilla siempre devuelve lo mismo.
-    Esto es la base de la simulacion del backend.
-    """
-    import numpy as np
-
-    tensor = np.zeros((1, 3, 224, 224), dtype=np.float32)
-
-    primero = predecir(tensor, semilla=12345)
-    segundo = predecir(tensor, semilla=12345)
-
-    assert primero.condicion == segundo.condicion
-    assert primero.confianza == segundo.confianza
-
-
-def test_predecir_devuelve_clase_valida_y_confianza_creible() -> None:
-    """
-    El resultado de la simulacion siempre es una de las 6 clases
-    y la confianza siempre esta en el rango esperado.
-    """
-    import numpy as np
-
-    tensor = np.zeros((1, 3, 224, 224), dtype=np.float32)
-    prediccion = predecir(tensor, semilla=42)
-
-    assert prediccion.condicion in CLASES
-    assert 0.0 <= prediccion.confianza <= 1.0
-
-
-def test_predecir_rechaza_tensor_con_forma_incorrecta() -> None:
-    """
-    Si alguien le pasa un tensor con otra forma, debe lanzar un error
-    claro en lugar de devolver una prediccion sin sentido.
-    """
-    import numpy as np
-
-    tensor_malo = np.zeros((2, 3, 224, 224), dtype=np.float32)
-
-    with pytest.raises(ValueError, match="forma \\(1, 3, 224, 224\\)"):
-        predecir(tensor_malo, semilla=1)
