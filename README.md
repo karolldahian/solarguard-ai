@@ -9,7 +9,7 @@
 [![CI Pipeline](https://img.shields.io/badge/CI%2FCD-GitHub%20Actions-2088FF?logo=githubactions&logoColor=white)](.github/workflows/ci.yml)
 [![License MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-> **Prototipo Integral de Inteligencia Artificial para Detección de Anomalías Superficiales y Triaje Automatizado de Mantenimiento en Granjas Fotovoltaicas.**  
+> **Prototipo Integral de Inteligencia Artificial para Detección de Anomalías Superficiales y Triaje Automatizado de Mantenimiento en Granjas Fotovoltaicas.**
 > *Proyecto desarrollado en la Especialización en Inteligencia Artificial — Universidad Autónoma de Occidente (UAO).*
 
 ---
@@ -170,6 +170,10 @@ El proyecto cuenta con un `Makefile` estandarizado para maximizar la productivid
 | `make test` | Calidad | Corre las **139 pruebas unitarias** con Pytest en modo detallado (`-v`). |
 | `make check` | Calidad | Ejecuta validación de linters (`ruff check`), formato y `uv lock --check`. |
 | `make format` | Calidad | Aplica corrección automática de estilos y formato con Ruff. |
+| `make gga` | Calidad | Ejecuta auditoría de arquitectura con Gentleman Guardian Angel. |
+| `make gga-pr` | Calidad | Audita el Pull Request actual contra `main` usando GGA con OpenCode. |
+| `make pre-commit` | Calidad | Ejecuta la suite completa de hooks de pre-commit sobre todos los archivos. |
+| `make pre-commit-install` | Entorno | Instala y vincula los hooks de Git para pre-commit y GGA. |
 | `make compile` | Calidad | Verifica la compilación sintáctica de todos los módulos Python. |
 | `make install` | Entorno | Sincroniza dependencias del proyecto usando `uv sync`. |
 | `make streamlit`| Pipeline | Inicia la interfaz web en Streamlit (cuando esté lista en `main`). |
