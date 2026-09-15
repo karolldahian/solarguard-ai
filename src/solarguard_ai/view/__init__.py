@@ -1,5 +1,10 @@
 """Capa de presentacion de SolarGuard AI (Streamlit)."""
 
+from solarguard_ai.view.alertas import (
+    render_ticket_result,
+    render_ticket_section,
+    validate_panel_id,
+)
 from solarguard_ai.view.diagnostico import (
     render_configuration_error,
     render_diagnosis,
@@ -33,7 +38,10 @@ __all__ = [
     "render_prediction",
     "render_priority",
     "render_probabilities",
+    "render_ticket_result",
+    "render_ticket_section",
     "resolve_model_path",
     "resolve_priority_config_path",
     "upload_image",
+    "validate_panel_id",
 ]
