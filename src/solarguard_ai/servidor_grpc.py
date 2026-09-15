@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import argparse
 import os
+import time
 from concurrent import futures
 from io import BytesIO
 
@@ -28,6 +29,7 @@ from solarguard_ai.grpc_interface import solarguard_pb2, solarguard_pb2_grpc
 
 # Importaciones del proyecto
 from solarguard_ai.ingesta import ImageIngestionError, load_image
+from solarguard_ai.mlflow_tracking import is_enabled, log_error, log_pipeline_request
 from solarguard_ai.priorizacion import load_priority_config, prioritize
 
 # Puerto por defecto. 50051 es el puerto clasico de gRPC,
@@ -80,9 +82,24 @@ class SolarGuardServicio(solarguard_pb2_grpc.SolarGuardServicioServicer):
         para que la interfaz pueda mostrarlos en pantalla.
         """
         nombre = request.nombre or "imagen_subida.jpg"
+        total_start = time.perf_counter()
+
+        # Variables para métricas de cada paso
+        ingestion_latency_ms = 0.0
+        preprocessing_latency_ms = 0.0
+        inference_latency_ms = 0.0
+        ticket_latency_ms = 0.0
 
         # --- Paso 0: que la peticion traiga datos utiles ---------------------------------
         if not request.imagen:
+            if is_enabled():
+                log_pipeline_request(
+                    panel_id=nombre,
+                    image_size=(0, 0),
+                    image_format="unknown",
+                    total_latency_ms=(time.perf_counter() - total_start) * 1000,
+                    error="empty_image",
+                )
             context.abort(
                 grpc.StatusCode.INVALID_ARGUMENT,
                 "La peticion no incluye bytes de imagen.",
@@ -90,14 +107,25 @@ class SolarGuardServicio(solarguard_pb2_grpc.SolarGuardServicioServicer):
 
         try:
             # --- Paso 1: cargar y validar la imagen (ingesta) ------------------------------
+            ingestion_start = time.perf_counter()
             imagen_cargada = load_image(BytesIO(request.imagen))
+            ingestion_latency_ms = (time.perf_counter() - ingestion_start) * 1000
+
+            image_size = (imagen_cargada.width, imagen_cargada.height)
+            image_format = imagen_cargada.format or "unknown"
 
             # --- Paso 2: preprocesar la imagen a tensor del modelo --------------------------
+            preprocessing_start = time.perf_counter()
             tensor = preprocesamiento.preprocess_for_solarscan(imagen_cargada.image)
+            preprocessing_latency_ms = (
+                time.perf_counter() - preprocessing_start
+            ) * 1000
 
             # --- Paso 3: inferir la condicion y confianza (ONNX Runtime) -------------------
             inference_client = _get_inference_client()
             prediction = inference_client.predict(tensor)
+            # La inferencia ya loguea su propia latencia interna, pero medimos la latencia vista desde aquí
+            inference_latency_ms = 0.0  # Se logea dentro de predict()
 
             # --- Paso 4: priorizacion con reglas de negocio ----------------------------------
             config = _get_priority_config()
@@ -108,6 +136,7 @@ class SolarGuardServicio(solarguard_pb2_grpc.SolarGuardServicioServicer):
             )
 
             # --- Paso 5: generar el ticket de mantenimiento -----------------------------------
+            ticket_start = time.perf_counter()
             ticket_result = tickets.generate_maintenance_ticket(
                 priority_result=priority_result,
                 panel_id=nombre,
@@ -116,6 +145,7 @@ class SolarGuardServicio(solarguard_pb2_grpc.SolarGuardServicioServicer):
                 location="Parque Solar - Bloque General",
                 force=True,  # En gRPC siempre generamos ticket para mostrar resultado
             )
+            ticket_latency_ms = (time.perf_counter() - ticket_start) * 1000
 
             if ticket_result.status == "skipped":
                 # Si no se genera ticket (ej. Clean sin force), creamos uno simulado para la respuesta
@@ -129,17 +159,63 @@ class SolarGuardServicio(solarguard_pb2_grpc.SolarGuardServicioServicer):
             else:
                 ticket = ticket_result.ticket
 
+            # Log exitoso del pipeline completo
+            if is_enabled():
+                log_pipeline_request(
+                    panel_id=nombre,
+                    image_size=image_size,
+                    image_format=image_format,
+                    total_latency_ms=(time.perf_counter() - total_start) * 1000,
+                    ingestion_latency_ms=ingestion_latency_ms,
+                    preprocessing_latency_ms=preprocessing_latency_ms,
+                    inference_latency_ms=inference_latency_ms,
+                    ticket_latency_ms=ticket_latency_ms,
+                    predicted_class=prediction.predicted_class,
+                    confidence=prediction.confidence,
+                    priority=priority_result.priority,
+                    requires_human_review=priority_result.requires_human_review,
+                    ticket_status=ticket_result.status,
+                )
+
         except (ImageIngestionError, UnidentifiedImageError, OSError) as error:
+            if is_enabled():
+                log_pipeline_request(
+                    panel_id=nombre,
+                    image_size=(0, 0),
+                    image_format="unknown",
+                    total_latency_ms=(time.perf_counter() - total_start) * 1000,
+                    ingestion_latency_ms=ingestion_latency_ms,
+                    error=str(error),
+                )
+                log_error("IngestionError", str(error), {"panel_id": nombre})
             contexto = grpc.StatusCode.INVALID_ARGUMENT
             context.abort(contexto, f"Error al procesar '{nombre}': {error}")
         except ValueError as error:
             # Errores de reglas de negocio (ej: condicion desconocida)
+            if is_enabled():
+                log_pipeline_request(
+                    panel_id=nombre,
+                    image_size=(0, 0),
+                    image_format="unknown",
+                    total_latency_ms=(time.perf_counter() - total_start) * 1000,
+                    error=str(error),
+                )
+                log_error("PrioritizationError", str(error), {"panel_id": nombre})
             context.abort(grpc.StatusCode.FAILED_PRECONDITION, str(error))
         except grpc.RpcError:
             # Re-lanzar errores de gRPC sin envolver
             raise
         except RuntimeError as error:
             # Errores de inferencia ONNX, configuración, etc.
+            if is_enabled():
+                log_pipeline_request(
+                    panel_id=nombre,
+                    image_size=(0, 0),
+                    image_format="unknown",
+                    total_latency_ms=(time.perf_counter() - total_start) * 1000,
+                    error=str(error),
+                )
+                log_error("InferenceError", str(error), {"panel_id": nombre})
             context.abort(
                 grpc.StatusCode.INTERNAL, f"Error interno del servidor: {error}"
             )

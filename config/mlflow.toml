@@ -1,0 +1,19 @@
+# Configuración de MLflow Tracking para SolarGuard AI.
+# Las variables de entorno tienen prioridad sobre este archivo.
+#
+# Variables de entorno soportadas:
+#   MLFLOW_TRACKING_URI   - URI del servidor MLflow (default: http://localhost:5000)
+#   MLFLOW_EXPERIMENT     - Nombre del experimento (default: solarguard-inference)
+#   MLFLOW_ENABLED        - Activar/desactivar tracking (default: true)
+
+[mlflow]
+tracking_uri = "http://localhost:5000"
+experiment_name = "solarguard-inference"
+enabled = true
+
+# Opcional: guardar imagen de entrada como artifact (consume espacio en disco)
+log_input_image = false
+
+# Opcional: configuración de autenticación (si el servidor MLflow la requiere)
+# username = ""
+# password = ""
