@@ -1,29 +1,59 @@
-# Declara objetivos que no representan archivos y siempre deben ejecutarse.
-.PHONY: help install run streamlit lock-check compile check grpc-gen servidor
+# ==============================================================================
+# SolarGuard AI — Makefile de Automatización y Calidad (UV)
+# Especialización en Inteligencia Artificial — Universidad Autónoma de Occidente
+# ==============================================================================
 
-# Muestra una guía rápida de los comandos disponibles.
+.PHONY: help status run streamlit backend install sync test check format clean lock-check compile gga gga-pr pre-commit pre-commit-install grpc-gen servidor
+
 help:
-	@echo "SolarGuard AI - comandos disponibles"
-	@echo "  make install    Sincroniza el entorno y las dependencias"
-	@echo "  make run        Ejecuta el entry point actual del paquete"
-	@echo "  make streamlit  Inicia la aplicación Streamlit"
-	@echo "  make grpc-gen   Regenera el código gRPC desde proto/solarguard.proto"
-	@echo "  make servidor   Inicia el backend gRPC"
-	@echo "  make lock-check Comprueba que uv.lock está actualizado"
-	@echo "  make compile    Comprueba la sintaxis de los módulos Python"
-	@echo "  make check      Ejecuta las validaciones disponibles"
+	@echo ====================================================================
+	@echo   SolarGuard AI • Comandos Make para Automatizacion (UV)
+	@echo ====================================================================
+	@echo [ESTADO Y PIPELINE]
+	@echo   make status       - Diagnostico de entorno, dependencias y componentes
+	@echo   make run          - Ejecuta el entry point actual del paquete
+	@echo   make streamlit    - Inicia la aplicacion interactiva de Streamlit
+	@echo   make backend      - Inicia el servidor backend gRPC (cuando este disponible)
+	@echo   make grpc-gen     - Regenera el codigo gRPC desde proto/solarguard.proto
+	@echo   make servidor     - Inicia el backend gRPC (alias de backend)
+	@echo --------------------------------------------------------------------
+	@echo [CALIDAD Y HERRAMIENTAS]
+	@echo   make test         - Ejecuta suite completa de pruebas unitarias (Pytest)
+	@echo   make check        - Audita linters, formato y compatibilidad
+	@echo   make format       - Formatea y corrige estilos con Ruff
+	@echo   make gga          - Ejecuta auditoria local con Gentleman Guardian Angel
+	@echo   make gga-pr       - Audita el Pull Request actual contra main con GGA
+	@echo   make pre-commit   - Ejecuta todos los hooks de pre-commit
+	@echo   make compile      - Verifica la sintaxis de todos los modulos Python
+	@echo   make lock-check   - Comprueba sincronizacion de dependencias en uv.lock
+	@echo   make clean        - Limpia caches y artefactos temporales
+	@echo   make install      - Sincroniza el entorno virtual con UV (uv sync)
+	@echo ====================================================================
 
-# Crea o actualiza el entorno virtual e instala las dependencias del proyecto.
-install:
-	uv sync
+# ------------------------------------------------------------------------------
+# Estado y Pipeline
+# ------------------------------------------------------------------------------
 
-# Ejecuta el punto de entrada actual del paquete SolarGuard AI.
+status:
+	uv run python scripts/status.py
+
 run:
 	uv run solarguard-ai
 
-# Inicia la aplicación web de Streamlit cuando app.py esté disponible.
 streamlit:
-	uv run streamlit run app.py
+	@python -c "import pathlib, subprocess; subprocess.run(['uv', 'run', 'streamlit', 'run', 'app.py']) if pathlib.Path('app.py').is_file() else print('\n[AVISO] app.py aun no esta disponible en la rama actual.\n        La interfaz Streamlit esta siendo desarrollada por el equipo (Tarea 9 - Karoll).\n')"
+
+backend:
+	@python -c "import pathlib, subprocess; subprocess.run(['uv', 'run', 'python', '-m', 'solarguard_ai.servidor_grpc']) if pathlib.Path('src/solarguard_ai/servidor_grpc.py').is_file() else print('\n[AVISO] servidor_grpc.py aun no esta disponible en la rama actual.\n        El servidor gRPC esta siendo desarrollado por el equipo (Tarea 11 - Jarvin).\n')"
+
+# ------------------------------------------------------------------------------
+# Entorno y Dependencias
+# ------------------------------------------------------------------------------
+
+install: sync
+
+sync:
+	uv sync
 
 # Regenera los archivos _pb2 a partir de proto/solarguard.proto.
 # Se ejecuta solo cuando cambia el contrato gRPC.
@@ -38,9 +68,49 @@ servidor:
 lock-check:
 	uv lock --check
 
-# Recorre los módulos fuente y verifica que su sintaxis Python sea válida.
 compile:
-	uv run python -m compileall src
+	uv run python -m compileall src scripts
 
-# Ejecuta todas las validaciones disponibles para el estado actual del proyecto.
+# ------------------------------------------------------------------------------
+# Calidad y Pruebas
+# ------------------------------------------------------------------------------
+
+test:
+	uv run pytest -v
+
+format:
+	uv run ruff format .
+	uv run ruff check --fix .
+
 check: lock-check compile
+	uv run ruff check .
+	uv run ruff format --check .
+	uv run pytest -q
+
+gga:
+	@echo "Ejecutando Gentleman Guardian Angel sobre cambios locales..."
+	@gga run
+
+gga-pr:
+	@echo "Ejecutando Gentleman Guardian Angel para revision de PR..."
+	@gga run --pr-mode --diff-only
+
+pre-commit:
+	uv run pre-commit run --all-files
+
+pre-commit-install:
+	uv run pre-commit install
+	gga install
+	gga install --commit-msg
+
+# ------------------------------------------------------------------------------
+# Limpieza
+# ------------------------------------------------------------------------------
+
+clean:
+	@echo Limpiando caches y archivos temporales...
+	@python -c "import pathlib, shutil; [shutil.rmtree(p, ignore_errors=True) for p in pathlib.Path('.').rglob('__pycache__')]"
+	@python -c "import pathlib, shutil; [shutil.rmtree(p, ignore_errors=True) for p in pathlib.Path('.').rglob('.pytest_cache')]"
+	@python -c "import pathlib, shutil; [shutil.rmtree(p, ignore_errors=True) for p in pathlib.Path('.').rglob('.ruff_cache')]"
+	@python -c "import pathlib, shutil; [shutil.rmtree(p, ignore_errors=True) for p in pathlib.Path('.').rglob('htmlcov')]"
+	@echo Limpieza completada exitosamente.

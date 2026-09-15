@@ -1,168 +1,192 @@
-"""
-Preprocesamiento de imagenes para SolarGuard AI.
+"""Preprocesamiento de imagenes para SolarGuard AI y SolarScan."""
 
-Antes de pasarle una imagen al modelo, hay que prepararla.
-El modelo solarscan-yolov8n-cls espera que la imagen tenga:
-  - Tamano exacto de 224 x 224 pixeles
-  - Colores en rango 0.0 a 1.0 (no de 0 a 255 como vienen normalmente)
-  - Un formato especifico de array que entienda ONNX Runtime
+from __future__ import annotations
 
-Aprendi que esto se llama "pipeline de preprocesamiento" y es muy comun
-en proyectos de vision por computador. Cada paso transforma la imagen
-un poco hasta dejarla lista para el modelo.
-"""
+from typing import Literal
 
-# numpy es la libreria que usamos para manejar los arrays numericos
-# PIL (Pillow) es la que ya usabamos en ingesta.py para abrir imagenes
 import numpy as np
-from PIL import Image
+from numpy.typing import NDArray
+from PIL import Image, ImageOps
 
-# Importamos el tipo LoadedImage que definimos en ingesta.py
-# asi podemos recibir imagenes ya validadas
-from solarguard_ai.ingesta import LoadedImage
+from .ingesta import LoadedImage
 
-# Este es el tamano que pide el modelo. Lo pongo como constante
-# para no escribir 224 en varios lugares y confundirme.
-TAMANO_MODELO = 224
+TARGET_SIZE = 224
+NormalizationMethod = Literal["minmax", "zscore"]
+FloatArray = NDArray[np.float32]
 
 
-def resize_lado_corto(imagen: Image.Image, tamano: int = TAMANO_MODELO) -> Image.Image:
+def normalize_pixels(
+    pixels: NDArray[np.generic], method: NormalizationMethod = "minmax"
+) -> FloatArray:
+    """Normaliza pixeles con escala 0..1 o estandarizacion z-score."""
+    values = np.asarray(pixels, dtype=np.float32)
+    if not np.isfinite(values).all():
+        raise ValueError("Los pixeles contienen valores no finitos.")
+    if values.size == 0:
+        raise ValueError("No se puede normalizar un arreglo vacio.")
+
+    if method == "minmax":
+        # Convierte imagenes uint8 y rangos arbitrarios al intervalo requerido.
+        minimum = values.min()
+        maximum = values.max()
+        if maximum == minimum:
+            return np.zeros_like(values, dtype=np.float32)
+        return ((values - minimum) / (maximum - minimum)).astype(np.float32)
+
+    if method == "zscore":
+        # La desviacion cero se representa con ceros para evitar divisiones invalidas.
+        standard_deviation = values.std()
+        if standard_deviation == 0:
+            return np.zeros_like(values, dtype=np.float32)
+        return ((values - values.mean()) / standard_deviation).astype(np.float32)
+
+    raise ValueError(f"Metodo de normalizacion no soportado: {method}")
+
+
+def preprocess_for_solarscan(
+    image: Image.Image | LoadedImage,
+    target_size: int = TARGET_SIZE,
+) -> FloatArray:
+    """Prepara una imagen para SolarScan como tensor float32 con forma NCHW.
+
+    Sigue el preprocesamiento publicado por el modelo: RGB, redimensionamiento
+    del lado menor a 224, recorte central de 224x224 y escala de 0 a 1.
     """
-    Cambia el tamano de la imagen para que el lado mas corto mida 'tamano' pixeles.
-    El lado mas largo se ajusta automaticamente para no deformar la imagen.
+    if target_size < 1:
+        raise ValueError("target_size debe ser mayor que cero.")
 
-    Por ejemplo: si la imagen es 800 x 600, despues de aplicar esta funcion
-    quedaria de 299 x 224 aproximadamente (porque 600 es el lado corto).
+    source_image = image.image if isinstance(image, LoadedImage) else image
+    rgb_image = source_image.convert("RGB")
+    width, height = rgb_image.size
+    if width < 1 or height < 1:
+        raise ValueError("La imagen debe tener dimensiones positivas.")
 
-    Aprendi que esto se llama "resize proporcional" y es importante para
-    no aplastar ni estirar las imagenes antes del recorte.
-    """
-    ancho_original, alto_original = imagen.size
+    # Se conserva la proporcion antes del recorte para no deformar el panel.
+    scale = target_size / min(width, height)
+    resized_size = (round(width * scale), round(height * scale))
+    resized_image = rgb_image.resize(resized_size, Image.Resampling.BILINEAR)
+    cropped_image = ImageOps.fit(
+        resized_image,
+        (target_size, target_size),
+        method=Image.Resampling.BILINEAR,
+        centering=(0.5, 0.5),
+    )
 
-    # Averiguo cual es el lado mas corto
-    if ancho_original < alto_original:
-        # El ancho es el lado corto, lo fijo en 'tamano'
-        nuevo_ancho = tamano
-        # Calculo el alto proporcional usando regla de tres
-        nuevo_alto = int(alto_original * tamano / ancho_original)
-    else:
-        # El alto es el lado corto (o son iguales), lo fijo en 'tamano'
-        nuevo_alto = tamano
-        # Calculo el ancho proporcional
-        nuevo_ancho = int(ancho_original * tamano / alto_original)
-
-    # LANCZOS es un metodo de remuestreo de alta calidad
-    # lo recomiendan cuando se achica una imagen porque conserva mejor los detalles
-    imagen_redimensionada = imagen.resize((nuevo_ancho, nuevo_alto), Image.LANCZOS)
-
-    return imagen_redimensionada
+    # ONNX Runtime recibe el orden de ejes NCHW y valores RGB en 0..1.
+    channels_last = np.asarray(cropped_image, dtype=np.float32) / 255.0
+    channels_first = np.transpose(channels_last, (2, 0, 1))
+    return channels_first[np.newaxis, ...].astype(np.float32)
 
 
-def recorte_central(imagen: Image.Image, tamano: int = TAMANO_MODELO) -> Image.Image:
-    """
-    Recorta un cuadrado del centro de la imagen.
+def augment_image(
+    image: Image.Image, include_original: bool = True
+) -> list[Image.Image]:
+    """Genera variantes geometricas simples para ampliar un conjunto de imagenes."""
+    augmented: list[Image.Image] = []
+    if include_original:
+        augmented.append(image.copy())
 
-    Despues del resize, la imagen puede ser algo como 299 x 224.
-    Esta funcion toma solo los 224 x 224 pixeles del centro.
-
-    El centro es la parte mas importante de una foto de panel solar
-    (normalmente ahi esta el panel principal).
-    """
-    ancho, alto = imagen.size
-
-    # Calculo desde donde empieza el recorte en X (horizontal)
-    # Ejemplo: si ancho=299 y tamano=224 → inicio_x = (299-224)/2 = 37
-    inicio_x = (ancho - tamano) // 2
-
-    # Lo mismo para Y (vertical)
-    inicio_y = (alto - tamano) // 2
-
-    # El recorte termina 'tamano' pixeles despues del inicio
-    fin_x = inicio_x + tamano
-    fin_y = inicio_y + tamano
-
-    # crop() de Pillow recibe (izquierda, arriba, derecha, abajo)
-    imagen_recortada = imagen.crop((inicio_x, inicio_y, fin_x, fin_y))
-
-    return imagen_recortada
+    # Estas transformaciones no cambian las clases visuales del panel.
+    augmented.extend(
+        [
+            ImageOps.mirror(image),
+            ImageOps.flip(image),
+            image.rotate(90, expand=True),
+        ]
+    )
+    return augmented
 
 
-def convertir_a_array(imagen: Image.Image) -> np.ndarray:
-    """
-    Convierte la imagen de Pillow a un array de numpy con valores entre 0.0 y 1.0.
+def split_rgb_channels(
+    image: Image.Image | NDArray[np.generic],
+) -> dict[str, FloatArray]:
+    """Separa una imagen RGB en canales normalizados R, G y B."""
+    channels_last = _as_channels_last(image)
+    if channels_last.shape[2] != 3:
+        raise ValueError("Se esperaba una imagen RGB con exactamente 3 canales.")
 
-    Las imagenes normalmente guardan los colores como numeros enteros de 0 a 255.
-    El modelo espera numeros decimales de 0.0 a 1.0, asi que hay que dividir entre 255.
-
-    Ademas, el array tiene que estar en formato CHW (Canales, Alto, Ancho)
-    pero numpy lo entrega en HWC (Alto, Ancho, Canales), asi que hay que reorganizarlo.
-    Esto se hace con transpose().
-    """
-    # Convierto la imagen a array de numpy
-    # El resultado tiene forma (alto, ancho, 3) porque son 3 canales RGB
-    array_hwc = np.array(imagen, dtype=np.float32)
-
-    # Divido entre 255 para que los valores queden entre 0.0 y 1.0
-    # Aprendi que esto se llama "normalizacion"
-    array_normalizado = array_hwc / 255.0
-
-    # Reorganizo de (alto, ancho, canales) a (canales, alto, ancho)
-    # transpose((2, 0, 1)) mueve el eje 2 al frente
-    array_chw = array_normalizado.transpose((2, 0, 1))
-
-    return array_chw
+    normalized = normalize_pixels(channels_last, method="minmax")
+    return {
+        "red": normalized[:, :, 0],
+        "green": normalized[:, :, 1],
+        "blue": normalized[:, :, 2],
+    }
 
 
-def agregar_dimension_batch(array: np.ndarray) -> np.ndarray:
-    """
-    Agrega una dimension extra al inicio del array.
-
-    ONNX Runtime espera que le mandes varios imagenes a la vez (un "batch").
-    Como solo mandamos una, igual tenemos que poner esa dimension.
-    El array pasa de forma (3, 224, 224) a forma (1, 3, 224, 224).
-
-    np.expand_dims con axis=0 inserta una dimension nueva en la posicion 0.
-    """
-    array_con_batch = np.expand_dims(array, axis=0)
-    return array_con_batch
+def calculate_ndvi(
+    image: NDArray[np.generic], nir_band: int, red_band: int, epsilon: float = 1e-8
+) -> FloatArray:
+    """Calcula NDVI para un arreglo multiespectral en formato HWC."""
+    nir, red = _select_bands(image, nir_band, red_band)
+    return _normalized_difference(nir, red, epsilon)
 
 
-def preprocesar(imagen_cargada: LoadedImage) -> np.ndarray:
-    """
-    Funcion principal que aplica todos los pasos de preprocesamiento.
-
-    Recibe una imagen ya validada (LoadedImage de ingesta.py) y
-    devuelve el array listo para darselo al modelo.
-
-    Los pasos son:
-      1. Resize del lado corto a 224 px
-      2. Recorte central de 224 x 224 px
-      3. Convertir a array float32 normalizado
-      4. Agregar dimension de batch
-
-    Al final el array tiene forma (1, 3, 224, 224).
-    """
-    # Paso 1: redimensionar
-    imagen_resize = resize_lado_corto(imagen_cargada.image, TAMANO_MODELO)
-
-    # Paso 2: recortar el centro
-    imagen_crop = recorte_central(imagen_resize, TAMANO_MODELO)
-
-    # Paso 3: pasar a array normalizado en formato CHW
-    array = convertir_a_array(imagen_crop)
-
-    # Paso 4: agregar la dimension de batch
-    tensor_final = agregar_dimension_batch(array)
-
-    return tensor_final
+def calculate_ndwi(
+    image: NDArray[np.generic], nir_band: int, green_band: int, epsilon: float = 1e-8
+) -> FloatArray:
+    """Calcula NDWI para un arreglo multiespectral en formato HWC."""
+    nir, green = _select_bands(image, nir_band, green_band)
+    return _normalized_difference(nir, green, epsilon)
 
 
-# Lista de cosas que este modulo exporta para que otros archivos puedan importarlas
+def extract_spectral_indices(
+    image: NDArray[np.generic],
+    nir_band: int,
+    red_band: int,
+    green_band: int,
+) -> dict[str, FloatArray]:
+    """Extrae NDVI y NDWI sin incorporarlos al tensor RGB de SolarScan."""
+    return {
+        "ndvi": calculate_ndvi(image, nir_band, red_band),
+        "ndwi": calculate_ndwi(image, nir_band, green_band),
+    }
+
+
+def _as_channels_last(image: Image.Image | NDArray[np.generic]) -> NDArray[np.float32]:
+    if isinstance(image, Image.Image):
+        return np.asarray(image.convert("RGB"), dtype=np.float32)
+    values = np.asarray(image, dtype=np.float32)
+    if values.ndim != 3:
+        raise ValueError("La imagen debe tener forma alto, ancho, canales (HWC).")
+    return values
+
+
+def _select_bands(
+    image: NDArray[np.generic], first_band: int, second_band: int
+) -> tuple[FloatArray, FloatArray]:
+    values = _as_channels_last(image)
+    channel_count = values.shape[2]
+    if not 0 <= first_band < channel_count or not 0 <= second_band < channel_count:
+        raise ValueError(
+            f"Los indices de banda deben estar entre 0 y {channel_count - 1}."
+        )
+    return values[:, :, first_band], values[:, :, second_band]
+
+
+def _normalized_difference(
+    first: FloatArray, second: FloatArray, epsilon: float
+) -> FloatArray:
+    if epsilon <= 0:
+        raise ValueError("epsilon debe ser mayor que cero.")
+
+    denominator = first + second
+    # Los pixeles con suma cero no aportan informacion y se fijan en cero.
+    result = np.divide(
+        first - second,
+        denominator,
+        out=np.zeros_like(first, dtype=np.float32),
+        where=np.abs(denominator) > epsilon,
+    )
+    return np.clip(result, -1.0, 1.0).astype(np.float32)
+
+
 __all__ = [
-    "TAMANO_MODELO",
-    "resize_lado_corto",
-    "recorte_central",
-    "convertir_a_array",
-    "agregar_dimension_batch",
-    "preprocesar",
+    "TARGET_SIZE",
+    "augment_image",
+    "calculate_ndvi",
+    "calculate_ndwi",
+    "extract_spectral_indices",
+    "normalize_pixels",
+    "preprocess_for_solarscan",
+    "split_rgb_channels",
 ]

@@ -4,14 +4,10 @@ Servidor gRPC de SolarGuard AI (el "backend").
 Este modulo es el corazon de la integracion: recibe la foto desde la
 interfaz (Streamlit) y la procesa con todo el pipeline del proyecto:
 
-  1. ingesta.load_image        -> valida la imagen y la deja en RGB
-  2. preprocesamiento.preprocesar -> la convierte en tensor (1, 3, 224, 224)
-  3. inferencia.predecir       -> "simula" al modelo y da condicion + confianza
-  4. tickets.generar_ticket    -> convierte el resultado en un ticket util
-
-Aprendi que en gRPC el servidor implementa una clase que "hereda" del
-servidor generado (add_SolarGuardServicioServicer_to_server) y cada
-metodo de la clase corresponde a un rpc del .proto.
+  1. ingesta.load_image               -> valida la imagen y la deja en RGB
+  2. preprocesamiento.preprocess_for_solarscan -> la convierte en tensor (1, 3, 224, 224)
+  3. inferencia.SolarScanInference    -> ejecuta el modelo ONNX y da prediccion
+  4. tickets.generate_maintenance_ticket -> convierte el resultado en un ticket
 
 Para iniciarlo desde consola:
     uv run python -m solarguard_ai.servidor_grpc
@@ -20,35 +16,50 @@ Para iniciarlo desde consola:
 from __future__ import annotations
 
 import argparse
-import zlib
+import os
 from concurrent import futures
 from io import BytesIO
 
 import grpc
 from PIL import UnidentifiedImageError
 
+from solarguard_ai import inferencia, preprocesamiento, tickets
+from solarguard_ai.grpc_interface import solarguard_pb2, solarguard_pb2_grpc
+
 # Importaciones del proyecto
 from solarguard_ai.ingesta import ImageIngestionError, load_image
-from solarguard_ai import preprocesamiento
-from solarguard_ai import inferencia
-from solarguard_ai.tickets import generar_ticket
-
-from solarguard_ai.grpc_interface import solarguard_pb2, solarguard_pb2_grpc
+from solarguard_ai.priorizacion import load_priority_config, prioritize
 
 # Puerto por defecto. 50051 es el puerto clasico de gRPC,
 # asi como el 8000 es el clasico de los servidores web.
 PUERTO_POR_DEFECTO = 50051
 
+# Configuración de priorización
+PRIORITY_CONFIG_PATH = "config/prioritization.toml"
+MODEL_PATH = "models/best.onnx"
 
-def _calcular_semilla(bytes_imagen: bytes) -> int:
-    """
-    Calcula la semilla de la simulacion a partir de los bytes de la imagen.
+# Cliente de inferencia (se inicializa perezosamente)
+_inference_client: inferencia.SolarScanInference | None = None
+_priority_config = None
 
-    La idea es que la misma foto siempre produzca la misma clasificacion
-    (determinismo). Se usa crc32, que es una funcion rapida de huella
-    digital: para un mismo archivo devuelve siempre el mismo numero.
-    """
-    return zlib.crc32(bytes_imagen)
+
+def _get_inference_client() -> inferencia.SolarScanInference:
+    global _inference_client
+    if _inference_client is None:
+        if not os.path.exists(MODEL_PATH):
+            raise FileNotFoundError(
+                f"No se encuentra el modelo ONNX en '{MODEL_PATH}'. "
+                "Descargue 'best.onnx' desde Hugging Face y colóquelo en la carpeta models/."
+            )
+        _inference_client = inferencia.SolarScanInference(MODEL_PATH)
+    return _inference_client
+
+
+def _get_priority_config():
+    global _priority_config
+    if _priority_config is None:
+        _priority_config = load_priority_config(PRIORITY_CONFIG_PATH)
+    return _priority_config
 
 
 class SolarGuardServicio(solarguard_pb2_grpc.SolarGuardServicioServicer):
@@ -82,18 +93,41 @@ class SolarGuardServicio(solarguard_pb2_grpc.SolarGuardServicioServicer):
             imagen_cargada = load_image(BytesIO(request.imagen))
 
             # --- Paso 2: preprocesar la imagen a tensor del modelo --------------------------
-            tensor = preprocesamiento.preprocesar(imagen_cargada)
+            tensor = preprocesamiento.preprocess_for_solarscan(imagen_cargada.image)
 
-            # --- Paso 3: inferir la condicion y confianza (por ahora simulado) --------------
-            semilla = _calcular_semilla(request.imagen)
-            prediccion = inferencia.predecir(tensor, semilla=semilla)
+            # --- Paso 3: inferir la condicion y confianza (ONNX Runtime) -------------------
+            inference_client = _get_inference_client()
+            prediction = inference_client.predict(tensor)
 
-            # --- Paso 4: generar el ticket de mantenimiento ------------------------------------
-            ticket = generar_ticket(
-                fuente=nombre,
-                condicion=prediccion.condicion,
-                confianza=prediccion.confianza,
+            # --- Paso 4: priorizacion con reglas de negocio ----------------------------------
+            config = _get_priority_config()
+            priority_result = prioritize(
+                predicted_class=prediction.predicted_class,
+                confidence=prediction.confidence,
+                review_threshold=config.review_confidence,
             )
+
+            # --- Paso 5: generar el ticket de mantenimiento -----------------------------------
+            ticket_result = tickets.generate_maintenance_ticket(
+                priority_result=priority_result,
+                panel_id=nombre,
+                predicted_class=prediction.predicted_class,
+                confidence=prediction.confidence,
+                location="Parque Solar - Bloque General",
+                force=True,  # En gRPC siempre generamos ticket para mostrar resultado
+            )
+
+            if ticket_result.status == "skipped":
+                # Si no se genera ticket (ej. Clean sin force), creamos uno simulado para la respuesta
+                ticket = tickets.build_ticket(
+                    priority_result=priority_result,
+                    panel_id=nombre,
+                    predicted_class=prediction.predicted_class,
+                    confidence=prediction.confidence,
+                    location="Parque Solar - Bloque General",
+                )
+            else:
+                ticket = ticket_result.ticket
 
         except (ImageIngestionError, UnidentifiedImageError, OSError) as error:
             contexto = grpc.StatusCode.INVALID_ARGUMENT
@@ -101,15 +135,32 @@ class SolarGuardServicio(solarguard_pb2_grpc.SolarGuardServicioServicer):
         except ValueError as error:
             # Errores de reglas de negocio (ej: condicion desconocida)
             context.abort(grpc.StatusCode.FAILED_PRECONDITION, str(error))
+        except grpc.RpcError:
+            # Re-lanzar errores de gRPC sin envolver
+            raise
+        except RuntimeError as error:
+            # Errores de inferencia ONNX, configuración, etc.
+            context.abort(
+                grpc.StatusCode.INTERNAL, f"Error interno del servidor: {error}"
+            )
 
-        # --- Paso 5: armar la respuesta del .proto -----------------------------------------
+        # --- Paso 6: armar la respuesta del .proto -----------------------------------------
         return solarguard_pb2.ResultadoClasificacion(
-            condicion=ticket.condicion,
-            confianza=ticket.confianza,
-            descripcion=ticket.descripcion,
-            prioridad=ticket.prioridad,
-            accion=ticket.accion,
-            fecha_hora=ticket.fecha_hora.strftime("%d/%m/%Y %H:%M"),
+            condicion=ticket.predicted_class,
+            confianza=ticket.confidence,
+            descripcion=ticket.body.split("### 2. Acción Requerida")[0]
+            .split("**Diagnóstico Visual**")[1]
+            .split("|")[2]
+            .strip()
+            if "**Diagnóstico Visual**" in ticket.body
+            else ticket.predicted_class,
+            prioridad=ticket.severity,
+            accion=ticket.body.split("### 2. Acción Requerida")[1]
+            .split("\n")[1]
+            .strip()
+            if "### 2. Acción Requerida" in ticket.body
+            else "Revisar panel",
+            fecha_hora=ticket.created_at[:19].replace("T", " "),
         )
 
     def VerificarServicio(self, request, context):
@@ -156,9 +207,7 @@ def main() -> None:
     Recibe el puerto opcional:
         uv run python -m solarguard_ai.servidor_grpc --puerto 50051
     """
-    analizador = argparse.ArgumentParser(
-        description="Backend gRPC de SolarGuard AI"
-    )
+    analizador = argparse.ArgumentParser(description="Backend gRPC de SolarGuard AI")
     analizador.add_argument(
         "--puerto",
         type=int,
@@ -177,6 +226,6 @@ def main() -> None:
 __all__ = [
     "PUERTO_POR_DEFECTO",
     "SolarGuardServicio",
-    "iniciar_servidor",
     "_construir_servidor",
+    "iniciar_servidor",
 ]

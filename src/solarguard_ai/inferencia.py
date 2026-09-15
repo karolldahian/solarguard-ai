@@ -1,103 +1,173 @@
-"""
-Inferencia del modelo solarscan-yolov8n-cls para SolarGuard AI.
-
-Este modulo es el que "conecta" el tensor preprocesado con una prediccion.
-
-IMPORTANTE: Aprendi que en el proyecto todavia no estan listos el archivo
-del modelo (best.onnx) ni el modulo de inferencia real con ONNX Runtime.
-Por eso este modulo es una SIMULACION: en vez de llamar al modelo, genera
-un resultado "falso pero seria" usando una semilla.
-
-Lo importante es que el resto del sistema (el servidor gRPC, la interfaz)
-ya se puede probar de punta a punta, y cuando llegue el modelo real,
-solo habra que cambiar la funcion predecir() por la que use ONNX Runtime.
-El resto del codigo no se tiene que tocar.
-
-Decidi que la simulacion sea DETERMINISTA: la misma semilla siempre da
-el mismo resultado. Asi, la misma imagen siempre produce la misma
-clasificacion y las pruebas no dependen del azar.
-"""
+"""Servicio de inferencia ONNX para el modelo SolarScan."""
 
 from __future__ import annotations
 
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass
+from pathlib import Path
+from typing import Any
 
 import numpy as np
+import onnxruntime as ort
+from numpy.typing import NDArray
 
-# Estas son las 6 condiciones que reconoce el modelo segun el README.
-# Las dejo como constante para que este modulo y tickets.py hablen el mismo idioma.
-CLASES = [
+FloatTensor = NDArray[np.float32]
+
+CLASS_NAMES = (
+    "Bird-drop",
     "Clean",
     "Dusty",
-    "Bird-drop",
-    "Physical-Damage",
     "Electrical-damage",
+    "Physical-Damage",
     "Snow-Covered",
-]
+)
+UNKNOWN_CLASS = "Unknown"
+DEFAULT_CONFIDENCE_THRESHOLD = 0.5
+EXPECTED_INPUT_SHAPE = (1, 3, 224, 224)
 
-# Probabilidad "tentativa" de cada clase en la simulacion.
-# La deje mas cargada hacia lo comun (paneles normales o con polvo),
-# como suele pasar en un parque solar real.
-PROBABILIDADES = np.array([0.35, 0.30, 0.10, 0.12, 0.05, 0.08], dtype=np.float64)
+
+class InferenceError(ValueError):
+    """Indica que el modelo o la entrada no pueden procesarse."""
 
 
 @dataclass(frozen=True)
-class PrediccionModelo:
-    """
-    Resultado de la inferencia sobre una sola imagen.
+class PredictionResult:
+    """Resultado estructurado de una prediccion SolarScan."""
 
-    Contiene exactamente lo que el resto del sistema necesita:
-      - condicion: cual de las 6 clases se detecto
-      - confianza: cuanto "cree" el modelo (entre 0.0 y 1.0)
-    """
-
-    condicion: str
-    confianza: float
+    predicted_class: str
+    confidence: float
+    probabilities: dict[str, float]
 
 
-def predecir(tensor: np.ndarray, semilla: int = 0) -> PrediccionModelo:
-    """
-    Simula la clasificacion del modelo sobre un tensor preprocesado.
+SessionFactory = Callable[[str], Any]
 
-    Recibe:
-      - tensor: array con forma (1, 3, 224, 224) como lo deja preprocesar().
-      - semilla: numero entero. La misma semilla siempre da el mismo resultado.
 
-    Devuelve una PrediccionModelo con la condicion y la confianza.
+class SolarScanInference:
+    """Carga SolarScan y ejecuta predicciones individuales o por lotes."""
 
-    Cuando el equipo de inferencia entregue el modelo real, esta funcion
-    se reemplaza por algo como:
-        sesion = onnxruntime.InferenceSession("modelos/best.onnx")
-        salida = sesion.run(None, {nombre_entrada: tensor})[0]
-    y el resto del codigo seguira funcionando igual.
-    """
-    # Valido la forma del tensor para que cualquier error sea claro desde el inicio
-    if tensor.ndim != 4 or tensor.shape[0] != 1:
-        raise ValueError(
-            "El tensor debe tener forma (1, 3, 224, 224), "
-            f"pero se recibio: {tensor.shape}"
+    def __init__(
+        self,
+        model_path: str | Path,
+        confidence_threshold: float = DEFAULT_CONFIDENCE_THRESHOLD,
+        session_factory: SessionFactory = ort.InferenceSession,
+    ) -> None:
+        model_path = Path(model_path)
+        if not model_path.is_file():
+            raise InferenceError(f"No existe el modelo ONNX: '{model_path}'.")
+        if not 0 <= confidence_threshold <= 1:
+            raise InferenceError("confidence_threshold debe estar entre 0 y 1.")
+
+        self.model_path = model_path
+        self.confidence_threshold = confidence_threshold
+        try:
+            # La sesion se crea una sola vez y se reutiliza para todas las inferencias.
+            self._session = session_factory(str(model_path))
+            self._input_name = self._session.get_inputs()[0].name
+        except (IndexError, OSError, RuntimeError, ValueError) as error:
+            raise InferenceError(
+                f"No se pudo cargar el modelo '{model_path}': {error}"
+            ) from error
+        self._cache: dict[bytes, PredictionResult] = {}
+
+    def predict(self, tensor: FloatTensor) -> PredictionResult:
+        """Predice una imagen preprocesada con forma `(1, 3, 224, 224)`."""
+        batch = _validate_tensor(tensor)
+        cache_key = _tensor_cache_key(batch)
+        cached_result = self._cache.get(cache_key)
+        if cached_result is not None:
+            return cached_result
+
+        probabilities = self._run_model(batch)[0]
+        result = _build_result(probabilities, self.confidence_threshold)
+        # La clave usa el contenido y la forma: imágenes idénticas evitan inferencias repetidas.
+        self._cache[cache_key] = result
+        return result
+
+    def predict_batch(self, tensors: Iterable[FloatTensor]) -> list[PredictionResult]:
+        """Predice un lote de tensores y reutiliza la caché por imagen."""
+        return [self.predict(tensor) for tensor in tensors]
+
+    def clear_cache(self) -> None:
+        """Elimina resultados cacheados sin recargar la sesión ONNX."""
+        self._cache.clear()
+
+    def _run_model(self, batch: FloatTensor) -> NDArray[np.float32]:
+        try:
+            outputs = self._session.run(None, {self._input_name: batch})
+            probabilities = np.asarray(outputs[0], dtype=np.float32)
+        except (IndexError, OSError, RuntimeError, ValueError) as error:
+            raise InferenceError(
+                f"Error durante la inferencia ONNX: {error}"
+            ) from error
+
+        if probabilities.ndim != 2 or probabilities.shape[0] != 1:
+            raise InferenceError(
+                f"El modelo devolvio una salida invalida: forma {probabilities.shape}."
+            )
+        if probabilities.shape[1] != len(CLASS_NAMES):
+            raise InferenceError(
+                f"Se esperaban {len(CLASS_NAMES)} clases y se recibieron "
+                f"{probabilities.shape[1]}."
+            )
+        if not np.isfinite(probabilities).all():
+            raise InferenceError("El modelo devolvio probabilidades no finitas.")
+
+        # Algunos exportadores devuelven logits; softmax los convierte en probabilidades.
+        if np.any(probabilities < 0) or not np.isclose(probabilities.sum(), 1.0):
+            probabilities = _softmax(probabilities)
+        return probabilities
+
+
+def _validate_tensor(tensor: NDArray[np.generic]) -> FloatTensor:
+    values = np.asarray(tensor, dtype=np.float32)
+    if values.shape != EXPECTED_INPUT_SHAPE:
+        raise InferenceError(
+            f"forma de entrada invalida: se esperaba {EXPECTED_INPUT_SHAPE} "
+            f"y se recibio {values.shape}."
         )
-
-    # np.random.default_rng crea un generador de azar, pero "plantado"
-    # con la semilla: cada vez que se llame con la misma semilla,
-    # genera exactamente los mismos numeros (por eso es determinista).
-    generador = np.random.default_rng(semilla)
-
-    # Elijo una clase de forma aleatoria pero usando las probabilidades
-    # de arriba. choice() con p=... pesa la seleccion.
-    condicion = generador.choice(CLASES, p=PROBABILIDADES)
-
-    # La confianza tambien sale del generador "plantado":
-    # arranca entre 0.70 y 1.0 para que sea un valor creible.
-    confianza = float(generador.uniform(0.70, 1.0))
-
-    return PrediccionModelo(condicion=condicion, confianza=confianza)
+    if not np.isfinite(values).all():
+        raise InferenceError("La entrada contiene valores no finitos.")
+    if values.min() < 0 or values.max() > 1:
+        raise InferenceError(
+            "La entrada debe contener valores normalizados entre 0 y 1."
+        )
+    return np.ascontiguousarray(values, dtype=np.float32)
 
 
-# Lo que este modulo exporta para que otros archivos lo puedan usar
+def _tensor_cache_key(tensor: FloatTensor) -> bytes:
+    return tensor.shape.__repr__().encode() + tensor.tobytes()
+
+
+def _build_result(
+    probabilities: NDArray[np.float32], threshold: float
+) -> PredictionResult:
+    # _run_model entrega la fila de probabilidades correspondiente a una imagen.
+    scores = probabilities
+    top_index = int(np.argmax(scores))
+    confidence = float(scores[top_index])
+    predicted_class = (
+        CLASS_NAMES[top_index] if confidence >= threshold else UNKNOWN_CLASS
+    )
+    return PredictionResult(
+        predicted_class=predicted_class,
+        confidence=confidence,
+        probabilities={
+            class_name: float(score) for class_name, score in zip(CLASS_NAMES, scores)
+        },
+    )
+
+
+def _softmax(values: NDArray[np.float32]) -> NDArray[np.float32]:
+    shifted = values - np.max(values, axis=1, keepdims=True)
+    exponentials = np.exp(shifted)
+    return exponentials / exponentials.sum(axis=1, keepdims=True)
+
+
 __all__ = [
-    "CLASES",
-    "PROBABILIDADES",
-    "PrediccionModelo",
-    "predecir",
+    "CLASS_NAMES",
+    "DEFAULT_CONFIDENCE_THRESHOLD",
+    "EXPECTED_INPUT_SHAPE",
+    "InferenceError",
+    "PredictionResult",
+    "SolarScanInference",
 ]

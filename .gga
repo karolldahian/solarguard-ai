@@ -1,0 +1,39 @@
+# Gentleman Guardian Angel Configuration
+# https://github.com/Gentleman-Programming/gentleman-guardian-angel
+
+# Proveedor de IA que utilizará GGA.
+# En este equipo está instalado OpenCode.
+PROVIDER="opencode"
+
+# Tipos de archivos que GGA revisará en SolarGuard AI.
+# Incluye código Python, configuración y documentación.
+FILE_PATTERNS="*.py,*.toml,*.yaml,*.yml,*.md"
+
+# Archivos o carpetas que GGA no debe revisar.
+# uv.lock es generado automáticamente por UV.
+# .venv contiene el entorno virtual local.
+EXCLUDE_PATTERNS="uv.lock,.venv/*"
+
+# Archivo que contiene las reglas de desarrollo y revisión del proyecto.
+RULES_FILE="AGENTS.md"
+
+# Si la respuesta de la IA es ambigua, GGA debe considerar
+# que la revisión no fue superada.
+STRICT_MODE="false"
+
+# Tiempo máximo, en segundos, para esperar la respuesta
+# del proveedor de IA.
+TIMEOUT="300"
+
+# Variante de razonamiento de OpenCode.
+# Por ahora se deja desactivada para utilizar
+# la configuración predeterminada de OpenCode.
+# OPENCODE_VARIANT="high"
+
+# Perfil de agente específico de OpenCode.
+# Por ahora se deja desactivado porque no hemos creado
+# un agente personalizado para GGA.
+# OPENCODE_AGENT="gga-reviewer"
+
+# Rama base utilizada cuando GGA revise un Pull Request.
+PR_BASE_BRANCH="main"

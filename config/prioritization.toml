@@ -1,0 +1,6 @@
+# Configuracion operativa de la priorizacion de mantenimiento.
+# El umbral de revision humana es un parametro operativo configurable;
+# no constituye una metrica cientifica de accuracy del modelo.
+
+[thresholds]
+review_confidence = 0.70

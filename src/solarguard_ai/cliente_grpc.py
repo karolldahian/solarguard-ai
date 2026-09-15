@@ -14,8 +14,6 @@ en comunicarse.
 
 from __future__ import annotations
 
-from typing import TypeAlias
-
 import grpc
 
 from solarguard_ai.grpc_interface import solarguard_pb2, solarguard_pb2_grpc
@@ -25,7 +23,7 @@ from solarguard_ai.grpc_interface import solarguard_pb2, solarguard_pb2_grpc
 DIRECCION_POR_DEFECTO = "localhost:50051"
 
 # Tipo util para las opciones de canal: asi no hay que repetir la firma.
-Channel: TypeAlias = grpc.Channel
+type Channel = grpc.Channel
 
 # Tiempo maximo (en segundos) que esperamos una respuesta del backend
 # antes de decirle al usuario que tardamos demasiado.
@@ -106,7 +104,7 @@ def verificar_servidor(
 __all__ = [
     "DIRECCION_POR_DEFECTO",
     "TIEMPO_ESPERA",
-    "crear_canal",
     "clasificar_imagen",
+    "crear_canal",
     "verificar_servidor",
 ]
