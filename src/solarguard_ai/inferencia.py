@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Callable, Iterable
+from typing import Any
 
 import numpy as np
 import onnxruntime as ort
@@ -95,7 +96,9 @@ class SolarScanInference:
             outputs = self._session.run(None, {self._input_name: batch})
             probabilities = np.asarray(outputs[0], dtype=np.float32)
         except (IndexError, OSError, RuntimeError, ValueError) as error:
-            raise InferenceError(f"Error durante la inferencia ONNX: {error}") from error
+            raise InferenceError(
+                f"Error durante la inferencia ONNX: {error}"
+            ) from error
 
         if probabilities.ndim != 2 or probabilities.shape[0] != 1:
             raise InferenceError(
@@ -125,7 +128,9 @@ def _validate_tensor(tensor: NDArray[np.generic]) -> FloatTensor:
     if not np.isfinite(values).all():
         raise InferenceError("La entrada contiene valores no finitos.")
     if values.min() < 0 or values.max() > 1:
-        raise InferenceError("La entrada debe contener valores normalizados entre 0 y 1.")
+        raise InferenceError(
+            "La entrada debe contener valores normalizados entre 0 y 1."
+        )
     return np.ascontiguousarray(values, dtype=np.float32)
 
 
@@ -133,12 +138,16 @@ def _tensor_cache_key(tensor: FloatTensor) -> bytes:
     return tensor.shape.__repr__().encode() + tensor.tobytes()
 
 
-def _build_result(probabilities: NDArray[np.float32], threshold: float) -> PredictionResult:
+def _build_result(
+    probabilities: NDArray[np.float32], threshold: float
+) -> PredictionResult:
     # _run_model entrega la fila de probabilidades correspondiente a una imagen.
     scores = probabilities
     top_index = int(np.argmax(scores))
     confidence = float(scores[top_index])
-    predicted_class = CLASS_NAMES[top_index] if confidence >= threshold else UNKNOWN_CLASS
+    predicted_class = (
+        CLASS_NAMES[top_index] if confidence >= threshold else UNKNOWN_CLASS
+    )
     return PredictionResult(
         predicted_class=predicted_class,
         confidence=confidence,

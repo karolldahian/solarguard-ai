@@ -13,7 +13,9 @@ from solarguard_ai.ingesta import (
 )
 
 
-def image_bytes(image_format: str, *, size: tuple[int, int] = (32, 24), mode: str = "RGB") -> bytes:
+def image_bytes(
+    image_format: str, *, size: tuple[int, int] = (32, 24), mode: str = "RGB"
+) -> bytes:
     image = Image.new(mode, size, color=0)
     buffer = BytesIO()
     image.save(buffer, format=image_format)

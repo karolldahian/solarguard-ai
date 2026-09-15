@@ -76,9 +76,9 @@ Cada capa del pipeline consume y entrega contratos inmutables basados en `datacl
   ```python
   @dataclass(frozen=True)
   class LoadedImage:
-      image: Image.Image       # Imagen en modo RGB
-      format: str              # Formato de origen ('JPEG', 'PNG', etc.)
-      size: tuple[int, int]    # Dimensiones originales (width, height)
+      image: Image.Image  # Imagen en modo RGB
+      format: str  # Formato de origen ('JPEG', 'PNG', etc.)
+      size: tuple[int, int]  # Dimensiones originales (width, height)
   ```
 
 ### 3.2. Preprocesamiento (`solarguard_ai.preprocesamiento`)
@@ -91,8 +91,8 @@ Cada capa del pipeline consume y entrega contratos inmutables basados en `datacl
   ```python
   @dataclass(frozen=True)
   class PredictionResult:
-      predicted_class: str             # Clean, Dusty, Bird-drop, Electrical-damage, etc.
-      confidence: float                # 0.0 a 1.0
+      predicted_class: str  # Clean, Dusty, Bird-drop, Electrical-damage, etc.
+      confidence: float  # 0.0 a 1.0
       probabilities: dict[str, float]  # Distribución completa de probabilidades
   ```
 
@@ -102,10 +102,10 @@ Cada capa del pipeline consume y entrega contratos inmutables basados en `datacl
   ```python
   @dataclass(frozen=True)
   class PriorityResult:
-      priority: PriorityLevel          # "high" | "medium" | "low"
-      recommended_action: str          # Acción operativa inmediata
-      requires_human_review: bool      # True si confidence < review_threshold o Unknown
-      reason: str                      # Justificación técnica de la prioridad
+      priority: PriorityLevel  # "high" | "medium" | "low"
+      recommended_action: str  # Acción operativa inmediata
+      requires_human_review: bool  # True si confidence < review_threshold o Unknown
+      reason: str  # Justificación técnica de la prioridad
   ```
 
 ### 3.5. Generación de Tickets (`solarguard_ai.tickets`)
@@ -114,21 +114,22 @@ Cada capa del pipeline consume y entrega contratos inmutables basados en `datacl
   ```python
   @dataclass(frozen=True)
   class MaintenanceTicket:
-      title: str                       # Título estandarizado para triaje
-      body: str                        # Cuerpo estructurado en Markdown con alertas y descargos
-      labels: list[str]                # ['maintenance', 'urgent', 'electrical', ...]
-      assignees: list[str]             # ['ing-electrico', ...]
-      severity: str                    # 'high' | 'medium' | 'low'
+      title: str  # Título estandarizado para triaje
+      body: str  # Cuerpo estructurado en Markdown con alertas y descargos
+      labels: list[str]  # ['maintenance', 'urgent', 'electrical', ...]
+      assignees: list[str]  # ['ing-electrico', ...]
+      severity: str  # 'high' | 'medium' | 'low'
       panel_id: str
       location: str
       predicted_class: str
       confidence: float
       requires_human_review: bool
-      created_at: str                  # ISO 8601 UTC
+      created_at: str  # ISO 8601 UTC
+
 
   @dataclass(frozen=True)
   class TicketCreationResult:
-      status: str                      # 'created' | 'simulated' | 'skipped' | 'failed'
+      status: str  # 'created' | 'simulated' | 'skipped' | 'failed'
       message: str
       ticket: MaintenanceTicket | None
       issue_number: int | None
