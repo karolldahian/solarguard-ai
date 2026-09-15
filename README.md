@@ -169,6 +169,41 @@ result = prioritize("Dusty", 0.75, review_threshold=config.review_confidence)
 
 La lectura del archivo siempre es explícita: `prioritize()` es una función pura y no lee configuraciones automáticamente. El valor debe ser numérico, finito y estar entre `0` y `1` inclusive; `config/prioritization.toml` es opcional y el valor por defecto sigue siendo `0.70`. Este umbral es una regla operativa y no una métrica científica de precisión del modelo.
 
+## Generación de tickets de mantenimiento
+
+El módulo `solarguard_ai.tickets` convierte las alertas de prioridad alta y media en tickets estructurados en Markdown y los despacha como GitHub Issues:
+
+```python
+from solarguard_ai.priorizacion import prioritize
+from solarguard_ai.tickets import generate_maintenance_ticket
+
+# Evaluar diagnóstico
+priority = prioritize("Electrical-damage", confidence=0.94)
+
+# Generar ticket (por defecto en modo simulación dry-run)
+result = generate_maintenance_ticket(
+    priority_result=priority,
+    panel_id="PANEL-B04-12",
+    predicted_class="Electrical-damage",
+    confidence=0.94,
+    location="Sector Sur - Bloque 4",
+)
+
+print(result.status)        # "created" o "simulated"
+print(result.issue_number)  # Número de Issue generado
+```
+
+Características del servicio de tickets:
+- **Filtrado por severidad:** Descarta automáticamente paneles limpios (`Clean`) salvo que se fuerce explícitamente (`force=True`).
+- **Asignación automática por área técnica:** `@ing-electrico` (daño eléctrico), `@tecnico-campo` (daño estructural/físico), `@mantenimiento-limpieza` (polvo, aves, nieve) y `@supervisor-triaje` (casos de baja confianza o `Unknown`).
+- **Etiquetado inteligente:** `maintenance`, `urgent`, `severity:high|medium`, `electrical`, `cleaning`, `requires-human-review`.
+- **Integración con GitHub API:** Permite autenticación con variable `GITHUB_TOKEN` o ejecución simulada en entornos de prueba locales sin conexión externa.
+
+## Documentación y Arquitectura
+
+Para consultar los contratos de interfaz, diagramas de flujo y especificación OpenAPI de los endpoints, revise:
+- [`docs/arquitectura.md`](docs/arquitectura.md): Diagrama C4/Mermaid, contratos de dataclasses y especificación OpenAPI 3.1.
+
 ## Uso actual
 
 El punto de entrada configurado actualmente es un comando de verificación del paquete:
@@ -187,20 +222,24 @@ uv run streamlit run app.py
 
 ```text
 solarguard-ai/
+├── docs/
+│   └── arquitectura.md
 ├── src/
 │   └── solarguard_ai/
 │       ├── __init__.py
 │       ├── ingesta.py
 │       ├── preprocesamiento.py
 │       ├── inferencia.py
-│       └── priorizacion.py
+│       ├── priorizacion.py
+│       └── tickets.py
 ├── config/
 │   └── prioritization.toml
 ├── tests/
 │   ├── test_ingesta.py
 │   ├── test_preprocesamiento.py
 │   ├── test_inferencia.py
-│   └── test_priorizacion.py
+│   ├── test_priorizacion.py
+│   └── test_tickets.py
 ├── .python-version
 ├── LICENSE
 ├── Makefile
@@ -209,7 +248,7 @@ solarguard-ai/
 └── uv.lock
 ```
 
-La estructura objetivo contempla separar la ingesta, el preprocesamiento, la inferencia, la priorización y la generación de tickets, además de incorporar pruebas automatizadas y una interfaz Streamlit. La priorización ya está implementada como módulo independiente y sin acoplamiento a ONNX Runtime.
+La estructura objetivo contempla separar la ingesta, el preprocesamiento, la inferencia, la priorización y la generación de tickets, además de incorporar pruebas automatizadas y una interfaz Streamlit. La priorización y la generación de tickets ya están implementadas como módulos independientes y desacoplados.
 
 ## Plan de trabajo
 
