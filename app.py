@@ -128,8 +128,7 @@ if archivo is not None and st.button("Clasificar panel", type="primary"):
 # Solo muestro el ticket si corresponde al archivo que esta cargado ahora
 resultado = st.session_state.get("resultado_ticket")
 resultado_coincide = (
-    archivo is not None
-    and st.session_state.get("resultado_de") == archivo.name
+    archivo is not None and st.session_state.get("resultado_de") == archivo.name
 )
 if resultado is not None and resultado_coincide:
     st.header("Ticket de mantenimiento")

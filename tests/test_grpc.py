@@ -35,6 +35,7 @@ PRIORIDADES_VALIDAS = {"Critica", "Alta", "Media", "Baja"}
 # Funciones auxiliares
 # ---------------------------------------------------------------------------
 
+
 def crear_imagen_bytes(ancho: int = 640, alto: int = 480) -> bytes:
     """Crea una imagen simple en memoria y la devuelve como bytes PNG."""
     imagen = Image.new("RGB", (ancho, alto), color=(100, 150, 200))
@@ -70,6 +71,7 @@ def backend_grpc():
 # ---------------------------------------------------------------------------
 # Pruebas del servicio (servidor <-> cliente de verdad)
 # ---------------------------------------------------------------------------
+
 
 def test_verificar_servidor_responde_activo(backend_grpc) -> None:
     """
@@ -177,6 +179,7 @@ def test_misma_imagen_siempre_da_misma_clasificacion(backend_grpc) -> None:
 # ---------------------------------------------------------------------------
 # Pruebas de la simulacion de inferencia
 # ---------------------------------------------------------------------------
+
 
 def test_predecir_usa_la_semilla_de_forma_determinista() -> None:
     """
