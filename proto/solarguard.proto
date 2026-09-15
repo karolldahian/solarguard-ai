@@ -1,0 +1,87 @@
+// Solarguard.proto
+// ---------------------------------------------------------------------------
+// Definicion del servicio gRPC de SolarGuard AI.
+//
+// Este archivo es el "contrato" entre la interfaz (Streamlit) y el backend.
+// Aprendi que en gRPC el .proto es lo primero que se escribe porque define
+// que datos entran y que datos salen, y con el comando grpc_tools.protoc
+// se generan automaticamente las clases de Python para el cliente y el
+// servidor (los archivos _pb2.py que estan en solarguard_ai/grpc_interface).
+//
+// Reglas del archivo:
+//   - Se escribe en proto3 (la version moderna del lenguaje).
+//   - Cada mensaje es como un "dataclass" que viaja por la red.
+//   - Los numeros (1, 2, 3...) son posiciones de campo, no valores.
+// ---------------------------------------------------------------------------
+
+syntax = "proto3";
+
+// El nombre del paquete tiene que ser unico dentro del proyecto.
+// Lo llamo solarguard para agrupar todos los mensajes del servicio.
+package solarguard;
+
+// ---------------------------------------------------------------------------
+// El servicio que expone el backend.
+//
+// Literalmente es una lista de funciones remotas: la interfaz las llama
+// como si fueran funciones normales, pero en realidad la peticion viaja
+// por la red hasta el servidor que hace el trabajo pesado (clasificar).
+// ---------------------------------------------------------------------------
+service SolarGuardServicio {
+  // Clasifica una imagen de panel solar y devuelve el ticket de mantenimiento.
+  rpc ClasificarImagen(ImagenSolicitud) returns (ResultadoClasificacion);
+
+  // Verifica que el servidor este activo. Sirve para que la interfaz
+  // avise al usuario cuando el backend no esta corriendo.
+  rpc VerificarServicio(Vacio) returns (EstadoServicio);
+}
+
+// ---------------------------------------------------------------------------
+// Mensajes de entrada
+// ---------------------------------------------------------------------------
+
+// Lo que envia la interfaz cuando quiere clasificar una foto.
+message ImagenSolicitud {
+  // Los bytes de la imagen tal cual vienen del archivo subido (jpg, png o tif).
+  bytes imagen = 1;
+
+  // Nombre del archivo (ej: "panel_01.jpg"). Solo se usa para mostrar
+  // la fuente en el ticket, no para abrir el archivo.
+  string nombre = 2;
+}
+
+// Mensaje vacio para pedidos que no necesitan datos (como el ping de estado).
+message Vacio {}
+
+// ---------------------------------------------------------------------------
+// Mensajes de salida
+// ---------------------------------------------------------------------------
+
+// Lo que devuelve el servidor despues de clasificar la imagen.
+// Es practicamente la misma informacion del TicketMantenimiento de tickets.py
+// pero en el lenguaje de gRPC para poder viajar por la red.
+message ResultadoClasificacion {
+  // La clase de condicion que detecto el modelo (ej: "Dusty", "Clean").
+  string condicion = 1;
+
+  // Que tan seguro esta el modelo. Entre 0.0 (poco seguro) y 1.0 (muy seguro).
+  float confianza = 2;
+
+  // Texto que explica la condicion ("Acumulacion visible de polvo"...).
+  string descripcion = 3;
+
+  // Nivel de urgencia: Critica, Alta, Media o Baja.
+  string prioridad = 4;
+
+  // Que debe hacer el equipo de mantenimiento.
+  string accion = 5;
+
+  // Fecha y hora en que se genero el ticket (formato texto listo para mostrar).
+  string fecha_hora = 6;
+}
+
+// Respuesta del verificador de servicio: dice si el backend esta vivo.
+message EstadoServicio {
+  // Mensaje simple de estado (ej: "SolarGuard AI backend activo").
+  string mensaje = 1;
+}

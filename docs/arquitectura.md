@@ -314,7 +314,148 @@ components:
 
 ---
 
-## 6. Mapeo Organizacional y Reglas de Triaje
+## 6. MLflow Tracking (Observabilidad de Inferencia)
+
+### 6.1. Propósito
+Registrar métricas operativas de cada inferencia para auditoría, análisis de rendimiento y debugging del modelo `solarscan-yolov8n-cls` en producción.
+
+### 6.2. Arquitectura de Tracking
+
+```mermaid
+flowchart LR
+    subgraph Pipeline ["Pipeline gRPC / Streamlit"]
+        ING[Ingesta]
+        PRE[Preprocesamiento]
+        INF[Inferencia ONNX]
+        PRI[Priorización]
+        TCK[Tickets]
+    end
+
+    subgraph MLflow_Client ["solarguard_ai.mlflow_tracking"]
+        CFG[Config via env vars]
+        LOG[log_* functions]
+        CTX[start_run context manager]
+    end
+
+    subgraph MLflow_Server ["MLflow Tracking Server"]
+        EXP[Experiment: solarguard-inference]
+        RUN[Runs por request]
+        MET[Metrics / Params / Tags]
+    end
+
+    ING -.->|latency_ms| LOG
+    PRE -.->|latency_ms| LOG
+    INF -.->|latency_ms, confidence, class, probs| LOG
+    PRI -.->|priority, review| LOG
+    TCK -.->|ticket_status| LOG
+    CFG --> LOG
+    CTX --> RUN
+    LOG --> MET
+    RUN --> EXP
+```
+
+### 6.3. Métricas Registradas
+
+| Métrica | Tipo | Origen | Descripción |
+| :--- | :--- | :--- | :--- |
+| `total_latency_ms` | metric | gRPC/Streamlit | Latencia end-to-end del request |
+| `ingestion_latency_ms` | metric | gRPC | Tiempo de validación y carga de imagen |
+| `preprocessing_latency_ms` | metric | gRPC | Tiempo de resize, crop, normalización |
+| `inference_latency_ms` | metric | Inferencia | Tiempo de `session.run()` ONNX |
+| `ticket_latency_ms` | metric | gRPC | Tiempo de generación de ticket GitHub |
+| `confidence` | metric | Inferencia | Score de confianza (0.0–1.0) |
+| `predicted_class` | tag | Inferencia | Clase: Clean, Dusty, Electrical-damage, etc. |
+| `prob_<class>` | metric | Inferencia | Probabilidad por clase (softmax) |
+| `cache_hit` | metric | Inferencia | 1.0 si vino de caché, 0.0 si inferencia fresca |
+| `is_unknown` | metric | Inferencia | 1.0 si clase = Unknown |
+| `requires_human_review` | metric | Priorización | 1.0 si confidence < threshold |
+| `priority` | tag | Priorización | high / medium / low |
+| `ticket_status` | tag | Tickets | created / simulated / skipped / failed |
+| `error_count` | metric | Error handling | 1 por cada error capturado |
+| `error_type` | tag | Error handling | IngestionError, InferenceError, etc. |
+
+### 6.4. Configuración
+
+**Variables de entorno:**
+| Variable | Default | Descripción |
+| :--- | :--- | :--- |
+| `MLFLOW_TRACKING_URI` | `http://localhost:5000` | URI del servidor MLflow |
+| `MLFLOW_EXPERIMENT` | `solarguard-inference` | Nombre del experimento |
+| `MLFLOW_ENABLED` | `true` | Activar/desactivar tracking |
+
+**Archivo:** `config/mlflow.toml`
+
+### 6.5. API del Módulo (`src/solarguard_ai/mlflow_tracking.py`)
+
+```python
+from solarguard_ai.mlflow_tracking import (
+    is_enabled,
+    start_run,
+    log_prediction,
+    log_pipeline_request,
+    log_streamlit_request,
+    log_error,
+)
+
+# Verificar si tracking está activo
+if is_enabled():
+    with start_run(run_name="inference-001") as run:
+        log_prediction(
+            predicted_class="Electrical-damage",
+            confidence=0.94,
+            latency_ms=42.5,
+            probabilities={"Electrical-damage": 0.94, ...},
+            model_path="models/best.onnx",
+            confidence_threshold=0.7,
+            panel_id="PANEL-001",
+        )
+
+# En servidor gRPC (automático en ClasificarImagen)
+log_pipeline_request(
+    panel_id="PANEL-001",
+    image_size=(640, 480),
+    image_format="JPEG",
+    total_latency_ms=150.0,
+    ingestion_latency_ms=5.0,
+    preprocessing_latency_ms=10.0,
+    inference_latency_ms=45.0,
+    ticket_latency_ms=20.0,
+    predicted_class="Dusty",
+    confidence=0.88,
+    priority="medium",
+    requires_human_review=False,
+    ticket_status="created",
+)
+
+# En Streamlit (automático al clasificar)
+log_streamlit_request(
+    panel_id="panel_01.jpg",
+    image_size=(800, 600),
+    image_format="PNG",
+    total_latency_ms=200.0,
+    network_latency_ms=50.0,
+    predicted_class="Bird-drop",
+    confidence=0.75,
+    priority="medium",
+)
+```
+
+### 6.6. Comandos Make
+
+| Comando | Descripción |
+| :--- | :--- |
+| `make mlflow-ui` | Inicia MLflow UI en `http://localhost:5000` |
+| `make mlflow-clean` | Elimina directorio local `mlruns/` |
+
+### 6.7. Modo Degradado
+Si `MLFLOW_ENABLED=false` o el servidor MLflow no está disponible:
+- Las funciones `log_*` y `start_run` hacen **no-op** (retornan inmediatamente)
+- No se lanzan excepciones ni se bloquea el pipeline
+- El comportamiento es transparente para el resto del sistema
+
+---
+
+## 7. Mapeo Organizacional y Reglas de Triaje
 
 Para dar cumplimiento a la operación en campo y despacho a cuadrillas:
 
@@ -330,8 +471,8 @@ Para dar cumplimiento a la operación en campo y despacho a cuadrillas:
 
 ---
 
-## 7. Verificación y Calidad
+## 8. Verificación y Calidad
 
-- **Pruebas Unitarias:** Cada contrato de datos cuenta con cobertura en `tests/test_ingesta.py`, `tests/test_preprocesamiento.py`, `tests/test_inferencia.py`, `tests/test_priorizacion.py` y `tests/test_tickets.py`.
+- **Pruebas Unitarias:** Cada contrato de datos cuenta con cobertura en `tests/test_ingesta.py`, `tests/test_preprocesamiento.py`, `tests/test_inferencia.py`, `tests/test_priorizacion.py`, `tests/test_tickets.py` y `tests/test_mlflow.py`.
 - **Estructura AAA:** Las pruebas se rigen por Arrange-Act-Assert sin efectos colaterales de red ni dependencias de tokens en CI.
 - **Herramientas de Calidad:** Validado bajo `ruff check` y `ruff format` conforme a Python 3.13.
