@@ -1,9 +1,9 @@
 # SolarGuard AI — Arquitectura del Sistema y Contratos de Integración
 
-> **Documento de Arquitectura y Especificación Técnica (Issue #4)**  
-> **Proyecto:** SolarGuard AI — Detección y Priorización de Mantenimiento en Paneles Fotovoltaicos con IA  
-> **Especialización en Inteligencia Artificial — Universidad Autónoma de Occidente (UAO)**  
-> **Autor / Arquitecto:** Jose Fernando Luque Cajiao  
+> **Documento de Arquitectura y Especificación Técnica (Issue #4)**
+> **Proyecto:** SolarGuard AI — Detección y Priorización de Mantenimiento en Paneles Fotovoltaicos con IA
+> **Especialización en Inteligencia Artificial — Universidad Autónoma de Occidente (UAO)**
+> **Autor / Arquitecto:** Jose Fernando Luque Cajiao
 
 ---
 

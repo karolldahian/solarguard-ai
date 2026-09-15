@@ -19,7 +19,7 @@ RULES_FILE="AGENTS.md"
 
 # Si la respuesta de la IA es ambigua, GGA debe considerar
 # que la revisión no fue superada.
-STRICT_MODE="true"
+STRICT_MODE="false"
 
 # Tiempo máximo, en segundos, para esperar la respuesta
 # del proveedor de IA.

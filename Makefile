@@ -3,7 +3,7 @@
 # Especialización en Inteligencia Artificial — Universidad Autónoma de Occidente
 # ==============================================================================
 
-.PHONY: help status run streamlit backend install sync test check format clean lock-check compile
+.PHONY: help status run streamlit backend install sync test check format clean lock-check compile gga gga-pr pre-commit pre-commit-install
 
 help:
 	@echo ====================================================================
@@ -19,6 +19,9 @@ help:
 	@echo   make test         - Ejecuta suite completa de pruebas unitarias (Pytest)
 	@echo   make check        - Audita linters, formato y compatibilidad
 	@echo   make format       - Formatea y corrige estilos con Ruff
+	@echo   make gga          - Ejecuta auditoria local con Gentleman Guardian Angel
+	@echo   make gga-pr       - Audita el Pull Request actual contra main con GGA
+	@echo   make pre-commit   - Ejecuta todos los hooks de pre-commit
 	@echo   make compile      - Verifica la sintaxis de todos los modulos Python
 	@echo   make lock-check   - Comprueba sincronizacion de dependencias en uv.lock
 	@echo   make clean        - Limpia caches y artefactos temporales
@@ -71,6 +74,22 @@ check: lock-check compile
 	uv run ruff check .
 	uv run ruff format --check .
 	uv run pytest -q
+
+gga:
+	@echo "Ejecutando Gentleman Guardian Angel sobre cambios locales..."
+	@gga run
+
+gga-pr:
+	@echo "Ejecutando Gentleman Guardian Angel para revisión de PR..."
+	@gga run --pr-mode --diff-only
+
+pre-commit:
+	uv run pre-commit run --all-files
+
+pre-commit-install:
+	uv run pre-commit install
+	gga install
+	gga install --commit-msg
 
 # ------------------------------------------------------------------------------
 # Limpieza
