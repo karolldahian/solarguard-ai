@@ -49,6 +49,7 @@ def backend_grpc(monkeypatch, tmp_path):
     """
     Levanta un backend gRPC 'de juguete' para las pruebas.
     """
+    monkeypatch.setenv("MLFLOW_ENABLED", "false")
     import numpy as np
 
     from solarguard_ai.inferencia import SolarScanInference
