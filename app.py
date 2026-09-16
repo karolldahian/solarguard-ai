@@ -7,6 +7,7 @@ from solarguard_ai.ingesta import ImageIngestionError, load_image
 from solarguard_ai.preprocesamiento import preprocess_for_solarscan
 from solarguard_ai.priorizacion import PrioritizationError, prioritize_prediction
 from solarguard_ai.view.alertas import render_ticket_section
+from solarguard_ai.view.batch import render_batch_analysis
 from solarguard_ai.view.dashboard import render_dashboard
 from solarguard_ai.view.diagnostico import (
     render_configuration_error,
@@ -35,58 +36,64 @@ st.set_page_config(page_title="SolarGuard AI", page_icon="☀️", layout="wide"
 
 render_header()
 
-uploaded_file = upload_image()
+individual_tab, batch_tab = st.tabs(["Analisis individual", "Analisis por lote"])
 
-if uploaded_file is not None:
-    try:
-        loaded = load_image(uploaded_file)
-    except ImageIngestionError as e:
-        st.error(str(e))
-    else:
-        render_image_preview(loaded)
-        render_image_metadata(loaded)
+with individual_tab:
+    uploaded_file = upload_image()
 
+    if uploaded_file is not None:
         try:
-            service = get_inference_service()
-        except InferenceError:
-            render_model_unavailable(resolve_model_path())
+            loaded = load_image(uploaded_file)
+        except ImageIngestionError as e:
+            st.error(str(e))
         else:
+            render_image_preview(loaded)
+            render_image_metadata(loaded)
+
             try:
-                tensor = preprocess_for_solarscan(loaded)
-                prediction = service.predict(tensor)
-            except (InferenceError, ValueError) as e:
-                st.error(f"No se pudo completar el diagnostico visual: {e}")
+                service = get_inference_service()
+            except InferenceError:
+                render_model_unavailable(resolve_model_path())
             else:
                 try:
-                    config = get_priority_config()
-                except PrioritizationError as e:
-                    render_configuration_error(e)
+                    tensor = preprocess_for_solarscan(loaded)
+                    prediction = service.predict(tensor)
+                except (InferenceError, ValueError) as e:
+                    st.error(f"No se pudo completar el diagnostico visual: {e}")
                 else:
                     try:
-                        priority = prioritize_prediction(
-                            prediction,
-                            review_threshold=config.review_confidence,
-                        )
+                        config = get_priority_config()
                     except PrioritizationError as e:
-                        st.error(
-                            f"No se pudo calcular la prioridad de mantenimiento: {e}"
-                        )
+                        render_configuration_error(e)
                     else:
-                        render_diagnosis(prediction, priority)
-                        render_ticket_section(
-                            priority,
-                            prediction.predicted_class,
-                            prediction.confidence,
-                        )
-                        analysis_record = build_analysis_record(
-                            image_name=loaded.source,
-                            image_bytes=uploaded_file.getvalue(),
-                            prediction=prediction,
-                            priority=priority,
-                        )
-                        add_analysis(analysis_record)
-else:
-    st.info("Suba una imagen de un panel solar para comenzar el analisis.")
+                        try:
+                            priority = prioritize_prediction(
+                                prediction,
+                                review_threshold=config.review_confidence,
+                            )
+                        except PrioritizationError as e:
+                            st.error(
+                                f"No se pudo calcular la prioridad de mantenimiento: {e}"
+                            )
+                        else:
+                            render_diagnosis(prediction, priority)
+                            render_ticket_section(
+                                priority,
+                                prediction.predicted_class,
+                                prediction.confidence,
+                            )
+                            analysis_record = build_analysis_record(
+                                image_name=loaded.source,
+                                image_bytes=uploaded_file.getvalue(),
+                                prediction=prediction,
+                                priority=priority,
+                            )
+                            add_analysis(analysis_record)
+    else:
+        st.info("Suba una imagen de un panel solar para comenzar el analisis.")
+
+with batch_tab:
+    render_batch_analysis()
 
 render_dashboard(get_history())
 render_risk_heatmap(get_history())

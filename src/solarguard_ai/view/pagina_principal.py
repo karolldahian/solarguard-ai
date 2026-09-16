@@ -29,6 +29,17 @@ def upload_image():
     )
 
 
+def upload_images():
+    """Muestra el widget de carga multiple y retorna los archivos subidos."""
+    return st.file_uploader(
+        "Seleccione varias imagenes de paneles solares",
+        type=_SUPPORTED_TYPES,
+        accept_multiple_files=True,
+        key="solarguard_upload_batch",
+        help="Formatos admitidos: JPEG, PNG y TIFF. Se analizan de forma secuencial.",
+    )
+
+
 def render_image_preview(loaded: LoadedImage) -> None:
     """Muestra la imagen cargada con su nombre como referencia."""
     st.image(loaded.image, caption=loaded.source, use_container_width=True)
