@@ -22,15 +22,10 @@ import streamlit as st
 from plotly.graph_objects import Figure
 
 from solarguard_ai.view.historial import AnalysisRecord, normalize_priority
+from solarguard_ai.view.rotulos import PRIORITY_LABELS
 
 _KNOWN_PRIORITIES = frozenset({"high", "medium", "low"})
 _PRIORITY_ORDER = ("high", "medium", "low")
-_PRIORITY_LABELS = {
-    "high": "Alta",
-    "medium": "Media",
-    "low": "Baja",
-    "unknown": "Desconocida",
-}
 _EMPTY_HISTORY_MESSAGE = (
     "Todavia no hay analisis registrados en esta sesion. "
     "Suba la imagen de un panel solar para que el mapa de calor de riesgo "
@@ -107,7 +102,7 @@ def build_risk_heatmap(matrix: RiskMatrix) -> Figure:
         rows,
         index=list(matrix.conditions),
         columns=[
-            _PRIORITY_LABELS.get(priority, priority) for priority in matrix.priorities
+            PRIORITY_LABELS.get(priority, priority) for priority in matrix.priorities
         ],
     )
     return px.imshow(

@@ -18,9 +18,13 @@ from PIL import Image
 from solarguard_ai.inferencia import InferenceError
 from solarguard_ai.priorizacion import PrioritizationError
 from solarguard_ai.view.batch import (
+    BatchAlertSummary,
     BatchImageResult,
     BatchSummary,
+    build_batch_alert_summary,
+    build_batch_failure_details,
     build_batch_results_table,
+    render_batch_alert_summary,
     render_batch_analysis,
     render_batch_results,
     run_batch_analysis,
@@ -31,7 +35,15 @@ from solarguard_ai.view.historial import (
     compute_image_fingerprint,
 )
 
-_TABLE_COLUMNS = ["Imagen", "Condicion", "Confianza", "Prioridad", "Estado"]
+_TABLE_COLUMNS = [
+    "Imagen",
+    "Condicion",
+    "Confianza",
+    "Prioridad",
+    "Revision humana",
+    "Accion recomendada",
+    "Estado",
+]
 
 
 class _NamedBytesIO(BytesIO):
@@ -50,10 +62,14 @@ class _FakePrediction:
 
 class _FakePriority:
     def __init__(
-        self, priority: str = "low", requires_human_review: bool = False
+        self,
+        priority: str = "low",
+        requires_human_review: bool = False,
+        recommended_action: str | None = None,
     ) -> None:
         self.priority = priority
         self.requires_human_review = requires_human_review
+        self.recommended_action = recommended_action or "No requiere intervencion."
 
 
 class _RecordingAnalyzer:
@@ -103,6 +119,8 @@ def _processed_result(
     predicted_class: str = "Clean",
     confidence: float = 0.90,
     priority: str = "low",
+    requires_human_review: bool | None = None,
+    recommended_action: str | None = None,
 ) -> BatchImageResult:
     return BatchImageResult(
         image_name=image_name,
@@ -110,6 +128,8 @@ def _processed_result(
         predicted_class=predicted_class,
         confidence=confidence,
         priority=priority,
+        requires_human_review=requires_human_review,
+        recommended_action=recommended_action,
     )
 
 
@@ -160,6 +180,61 @@ def test_run_batch_analysis_una_imagen() -> None:
     assert analyzer.calls == ["panel-a.png"]
     assert len(history) == 1
     assert history[0].image_fingerprint == compute_image_fingerprint(payload)
+
+
+def test_run_batch_analysis_procesada_conserva_mantenimiento() -> None:
+    # Arrange: el PriorityResult ya calculado reutiliza sus campos.
+    payload = _image_payload()
+    history: list[AnalysisRecord] = []
+    analyzer = _RecordingAnalyzer(
+        _FakePrediction("Electrical-damage", 0.95),
+        _FakePriority(
+            priority="high",
+            requires_human_review=False,
+            recommended_action="Priorizar inspeccion tecnica.",
+        ),
+    )
+
+    # Act
+    summary = run_batch_analysis(
+        [_source("panel-a.png", payload)],
+        history=history,
+        analyze_one=analyzer,
+    )
+
+    # Assert: no se re-ejecuta nada; se reutiliza el PriorityResult original.
+    result = summary.results[0]
+    assert result.status == "processed"
+    assert result.requires_human_review is False
+    assert result.recommended_action == "Priorizar inspeccion tecnica."
+    assert analyzer.calls == ["panel-a.png"]
+
+
+def test_run_batch_analysis_procesada_conserva_revision_humana() -> None:
+    # Arrange: Unknown siempre exige revision humana en la priorizacion.
+    payload = _image_payload()
+    history: list[AnalysisRecord] = []
+    analyzer = _RecordingAnalyzer(
+        _FakePrediction("Unknown", 0.50),
+        _FakePriority(
+            priority="medium",
+            requires_human_review=True,
+            recommended_action="Requiere revision humana.",
+        ),
+    )
+
+    # Act
+    summary = run_batch_analysis(
+        [_source("u.png", payload)],
+        history=history,
+        analyze_one=analyzer,
+    )
+
+    # Assert
+    result = summary.results[0]
+    assert result.status == "processed"
+    assert result.requires_human_review is True
+    assert result.recommended_action == "Requiere revision humana."
 
 
 def test_run_batch_analysis_varias_imagenes_validas() -> None:
@@ -289,6 +364,25 @@ def test_run_batch_analysis_duplicado_dentro_del_mismo_lote() -> None:
     assert summary.duplicates == 1
     assert [result.status for result in summary.results] == ["processed", "duplicate"]
     assert len(history) == 1
+
+
+def test_run_batch_analysis_fallida_y_duplicada_sin_mantenimiento() -> None:
+    # Arrange: fallida por archivo corrupto y duplicada contra el historial.
+    payload = _image_payload()
+    history = [_make_record("prev.png", payload)]
+
+    # Act
+    summary = run_batch_analysis(
+        [_source("bad.png", b"corrupt"), _source("copia.png", payload)],
+        history=history,
+        analyze_one=_RecordingAnalyzer(),
+    )
+
+    # Assert: ni la fallida ni la duplicada exponen datos de mantenimiento.
+    assert [result.status for result in summary.results] == ["failed", "duplicate"]
+    for result in summary.results:
+        assert result.requires_human_review is None
+        assert result.recommended_action is None
 
 
 def test_run_batch_analysis_invariante_del_resumen() -> None:
@@ -554,7 +648,12 @@ def test_build_batch_results_table_con_resultados() -> None:
         failed=1,
         duplicates=1,
         results=(
-            _processed_result(),
+            _processed_result(
+                predicted_class="Clean",
+                priority="low",
+                requires_human_review=False,
+                recommended_action="No requiere intervencion inmediata.",
+            ),
             BatchImageResult(
                 image_name="bad.png",
                 status="failed",
@@ -573,21 +672,192 @@ def test_build_batch_results_table_con_resultados() -> None:
     assert rows[0]["Imagen"] == "a.png"
     assert rows[0]["Condicion"] == "Clean"
     assert rows[0]["Confianza"] == "90.00%"
-    assert rows[0]["Prioridad"] == "low"
+    assert rows[0]["Prioridad"] == "Baja"
+    assert rows[0]["Revision humana"] == "No"
+    assert rows[0]["Accion recomendada"] == "No requiere intervencion inmediata."
     assert rows[0]["Estado"] == "Procesada"
 
     assert rows[1]["Imagen"] == "bad.png"
     assert rows[1]["Condicion"] == "-"
     assert rows[1]["Confianza"] == "-"
     assert rows[1]["Prioridad"] == "-"
-    assert rows[1]["Estado"].startswith("Fallida")
-    assert "No se pudo leer" in rows[1]["Estado"]
+    assert rows[1]["Revision humana"] == "-"
+    assert rows[1]["Accion recomendada"] == "-"
+    assert rows[1]["Estado"] == "Fallida"
 
     assert rows[2]["Imagen"] == "dup.png"
     assert rows[2]["Condicion"] == "-"
     assert rows[2]["Confianza"] == "-"
     assert rows[2]["Prioridad"] == "-"
-    assert rows[2]["Estado"].startswith("Duplicada")
+    assert rows[2]["Revision humana"] == "-"
+    assert rows[2]["Accion recomendada"] == "-"
+    assert rows[2]["Estado"] == "Duplicada"
+
+
+def test_build_batch_results_table_muestra_revision_humana_si_no() -> None:
+    # Arrange: una procesada marca revision humana y otra no.
+    summary = BatchSummary(
+        selected=2,
+        processed=2,
+        failed=0,
+        duplicates=0,
+        results=(
+            _processed_result(
+                image_name="ok.png",
+                requires_human_review=False,
+                recommended_action="No requiere intervencion.",
+            ),
+            _processed_result(
+                image_name="rev.png",
+                requires_human_review=True,
+                recommended_action="Requiere revision humana.",
+            ),
+        ),
+    )
+
+    # Act
+    rows = build_batch_results_table(summary).to_dict("records")
+
+    # Assert: "Si"/"No" y la accion recomendada conservada.
+    assert rows[0]["Revision humana"] == "No"
+    assert rows[1]["Revision humana"] == "Si"
+    assert rows[0]["Accion recomendada"] == "No requiere intervencion."
+    assert rows[1]["Accion recomendada"] == "Requiere revision humana."
+
+
+def test_build_batch_failure_details_extrae_fallidas_con_mensaje() -> None:
+    # Arrange: solo las fallidas con mensaje quedan en el detalle.
+    summary = BatchSummary(
+        selected=4,
+        processed=1,
+        failed=2,
+        duplicates=1,
+        results=(
+            _processed_result(),
+            BatchImageResult(
+                image_name="bad1.png",
+                status="failed",
+                error_message="No se pudo leer 'bad1.png'.",
+            ),
+            BatchImageResult(image_name="bad2.png", status="failed"),
+            BatchImageResult(image_name="dup.png", status="duplicate"),
+        ),
+    )
+
+    # Act
+    details = build_batch_failure_details(summary)
+
+    # Assert
+    assert details == (("bad1.png", "No se pudo leer 'bad1.png'."),)
+
+
+def test_build_batch_failure_details_vacio() -> None:
+    # Arrange
+    summary = BatchSummary(
+        selected=1,
+        processed=1,
+        failed=0,
+        duplicates=0,
+        results=(_processed_result(),),
+    )
+
+    # Act
+    details = build_batch_failure_details(summary)
+
+    # Assert
+    assert details == ()
+
+
+# ---------------------------------------------------------------------------
+# Nucleo puro: build_batch_alert_summary
+# ---------------------------------------------------------------------------
+
+
+def test_build_batch_alert_summary_cuenta_prioridades_y_revision() -> None:
+    # Arrange
+    summary = BatchSummary(
+        selected=6,
+        processed=6,
+        failed=0,
+        duplicates=0,
+        results=(
+            _processed_result(
+                image_name="a.png", priority="high", requires_human_review=True
+            ),
+            _processed_result(
+                image_name="b.png", priority="high", requires_human_review=False
+            ),
+            _processed_result(
+                image_name="c.png", priority="medium", requires_human_review=True
+            ),
+            _processed_result(
+                image_name="d.png", priority="medium", requires_human_review=False
+            ),
+            _processed_result(
+                image_name="e.png", priority="low", requires_human_review=False
+            ),
+            _processed_result(
+                image_name="f.png", priority="low", requires_human_review=False
+            ),
+        ),
+    )
+
+    # Act
+    alerts = build_batch_alert_summary(summary)
+
+    # Assert
+    assert alerts == BatchAlertSummary(
+        high=2,
+        medium=2,
+        low=2,
+        requires_human_review=2,
+    )
+
+
+def test_build_batch_alert_summary_ignora_fallidas_y_duplicadas() -> None:
+    # Arrange: las fallidas/duplicadas no deben inflar ninguna metrica.
+    summary = BatchSummary(
+        selected=4,
+        processed=1,
+        failed=2,
+        duplicates=1,
+        results=(
+            _processed_result(
+                image_name="ok.png",
+                priority="medium",
+                requires_human_review=True,
+            ),
+            BatchImageResult(
+                image_name="bad1.png",
+                status="failed",
+                error_message="No se pudo leer 'bad1.png'.",
+            ),
+            BatchImageResult(image_name="bad2.png", status="failed"),
+            BatchImageResult(image_name="dup.png", status="duplicate"),
+        ),
+    )
+
+    # Act
+    alerts = build_batch_alert_summary(summary)
+
+    # Assert: solo cuenta la imagen procesada.
+    assert alerts == BatchAlertSummary(high=0, medium=1, low=0, requires_human_review=1)
+
+
+def test_build_batch_alert_summary_sin_resultados() -> None:
+    # Arrange
+    summary = BatchSummary(selected=0, processed=0, failed=0, duplicates=0, results=())
+
+    # Act
+    alerts = build_batch_alert_summary(summary)
+
+    # Assert
+    assert alerts == BatchAlertSummary(
+        high=0,
+        medium=0,
+        low=0,
+        requires_human_review=0,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -621,7 +891,10 @@ def test_render_batch_results_muestra_metricas_y_tabla() -> None:
         failed=1,
         duplicates=0,
         results=(
-            _processed_result(),
+            _processed_result(
+                requires_human_review=False,
+                recommended_action="No requiere intervencion inmediata.",
+            ),
             BatchImageResult(
                 image_name="bad.png",
                 status="failed",
@@ -640,11 +913,131 @@ def test_render_batch_results_muestra_metricas_y_tabla() -> None:
         # Act
         render_batch_results(summary)
 
-    # Assert
-    mock_st.columns.assert_called_once_with(4)
+    # Assert: dos filas de 4 columnas (metricas del lote + resumen de alertas).
+    assert mock_st.columns.call_args_list == [((4,),), ((4,),)]
     for column in mock_st.columns.return_value:
-        column.metric.assert_called_once()
+        assert column.metric.call_count == 2
+    metric_labels = {
+        call.args[0]
+        for mock_column in mock_st.columns.return_value
+        for call in mock_column.metric.call_args_list
+    }
+    assert metric_labels == {
+        "Seleccionadas",
+        "Procesadas",
+        "Fallidas",
+        "Duplicadas",
+        "Prioridad Alta",
+        "Prioridad Media",
+        "Prioridad Baja",
+        "Requieren revision humana",
+    }
     mock_st.dataframe.assert_called_once()
+    mock_st.expander.assert_called_once_with("Detalle de archivos fallidos")
+
+
+def test_render_batch_results_muestra_resumen_de_alertas() -> None:
+    # Arrange
+    summary = BatchSummary(
+        selected=1,
+        processed=1,
+        failed=0,
+        duplicates=0,
+        results=(
+            _processed_result(
+                priority="high",
+                requires_human_review=True,
+                recommended_action="Priorizar inspeccion tecnica.",
+            ),
+        ),
+    )
+    with patch("solarguard_ai.view.batch.st") as mock_st:
+        mock_st.columns.return_value = (
+            MagicMock(),
+            MagicMock(),
+            MagicMock(),
+            MagicMock(),
+        )
+
+        # Act
+        render_batch_results(summary)
+
+    # Assert: el bloque "Resumen de alertas del lote" se muestra una sola vez.
+    subheaders = [call.args[0] for call in mock_st.subheader.call_args_list]
+    assert subheaders.count("Resumen de alertas del lote") == 1
+    metric_values = {
+        call.args[1]
+        for mock_column in mock_st.columns.return_value
+        for call in mock_column.metric.call_args_list
+    }
+    assert metric_values == {1, 0}
+
+
+def test_render_batch_alert_summary_muestra_metricas_calculadas() -> None:
+    # Arrange
+    summary = BatchSummary(
+        selected=2,
+        processed=2,
+        failed=0,
+        duplicates=0,
+        results=(
+            _processed_result(
+                image_name="a.png", priority="high", requires_human_review=True
+            ),
+            _processed_result(
+                image_name="b.png", priority="low", requires_human_review=False
+            ),
+        ),
+    )
+    with patch("solarguard_ai.view.batch.st") as mock_st:
+        mock_st.columns.return_value = (
+            MagicMock(),
+            MagicMock(),
+            MagicMock(),
+            MagicMock(),
+        )
+
+        # Act
+        render_batch_alert_summary(summary)
+
+    # Assert: valores exactos calculados por la funcion pura.
+    labels = {
+        call.args[0]
+        for mock_column in mock_st.columns.return_value
+        for call in mock_column.metric.call_args_list
+    }
+    assert labels == {
+        "Prioridad Alta",
+        "Prioridad Media",
+        "Prioridad Baja",
+        "Requieren revision humana",
+    }
+    mock_st.columns.return_value[0].metric.assert_called_once_with("Prioridad Alta", 1)
+
+
+def test_render_batch_results_sin_fallidas_no_muestra_expander() -> None:
+    # Arrange
+    summary = BatchSummary(
+        selected=1,
+        processed=1,
+        failed=0,
+        duplicates=0,
+        results=(_processed_result(),),
+    )
+    with patch("solarguard_ai.view.batch.st") as mock_st:
+        mock_st.columns.return_value = (
+            MagicMock(),
+            MagicMock(),
+            MagicMock(),
+            MagicMock(),
+        )
+
+        # Act
+        render_batch_results(summary)
+
+    # Assert
+    mock_st.dataframe.assert_called_once()
+    mock_st.expander.assert_not_called()
 
 
 def test_render_batch_analysis_procesa_y_persiste_resumen_sin_bytes() -> None:
@@ -735,4 +1128,108 @@ def test_render_batch_analysis_usa_resumen_almacenado_sin_reprocesar() -> None:
     # Assert: no se reprocesa y se muestra el resumen guardado.
     mock_run.assert_not_called()
     mock_st.dataframe.assert_called_once()
+    mock_st.info.assert_not_called()
+
+
+def test_render_batch_analysis_relanzado_no_duplica_resultados() -> None:
+    # Arrange: hay un resumen previo guardado y el usuario repulsa el boton.
+    # Regresion Etapa 6: en ese rerun solo debe verse un unico bloque.
+    payload = _image_payload()
+    previous = BatchSummary(
+        selected=1,
+        processed=1,
+        failed=0,
+        duplicates=0,
+        results=(_processed_result(image_name="anterior.png"),),
+    )
+    latest = BatchSummary(
+        selected=1,
+        processed=1,
+        failed=0,
+        duplicates=0,
+        results=(_processed_result(image_name="nueva.png"),),
+    )
+    session_state: dict[str, object] = {
+        "solarguard_batch_summary": previous,
+        "solarguard_batch_names": ("a.png",),
+    }
+    with (
+        patch("solarguard_ai.view.batch.st") as mock_st,
+        patch(
+            "solarguard_ai.view.batch.upload_images",
+            return_value=[_source("a.png", payload)],
+        ),
+        patch(
+            "solarguard_ai.view.batch.get_inference_service",
+            return_value=MagicMock(),
+        ),
+        patch(
+            "solarguard_ai.view.batch.get_priority_config",
+            return_value=MagicMock(review_confidence=0.70),
+        ),
+        patch("solarguard_ai.view.batch.get_history", return_value=[]),
+        patch(
+            "solarguard_ai.view.batch.run_batch_analysis",
+            return_value=latest,
+        ) as mock_run,
+    ):
+        mock_st.session_state = session_state
+        mock_st.button.return_value = True
+        mock_st.progress.return_value = MagicMock()
+        mock_st.columns.return_value = (
+            MagicMock(),
+            MagicMock(),
+            MagicMock(),
+            MagicMock(),
+        )
+
+        # Act
+        render_batch_analysis()
+
+    # Assert: se muestra un unico bloque "Resultados del lote" con el resumen nuevo.
+    mock_run.assert_called_once()
+    assert session_state["solarguard_batch_summary"] is latest
+    assert session_state["solarguard_batch_names"] == ("a.png",)
+    subheaders = [c.args[0] for c in mock_st.subheader.call_args_list]
+    assert subheaders.count("Resultados del lote") == 1
+    mock_st.dataframe.assert_called_once()
+
+
+def test_render_batch_analysis_no_muestra_resumen_de_otros_archivos() -> None:
+    # Arrange: el resumen guardado pertenece a "a.png" pero se subio "b.png".
+    payload = _image_payload()
+    summary = BatchSummary(
+        selected=1,
+        processed=1,
+        failed=0,
+        duplicates=0,
+        results=(_processed_result(),),
+    )
+    session_state: dict[str, object] = {
+        "solarguard_batch_summary": summary,
+        "solarguard_batch_names": ("a.png",),
+    }
+    with (
+        patch("solarguard_ai.view.batch.st") as mock_st,
+        patch(
+            "solarguard_ai.view.batch.upload_images",
+            return_value=[_source("b.png", payload)],
+        ),
+        patch("solarguard_ai.view.batch.run_batch_analysis") as mock_run,
+    ):
+        mock_st.session_state = session_state
+        mock_st.button.return_value = False
+        mock_st.columns.return_value = (
+            MagicMock(),
+            MagicMock(),
+            MagicMock(),
+            MagicMock(),
+        )
+
+        # Act
+        render_batch_analysis()
+
+    # Assert: no se reprocesa, no se muestra el resumen viejo ni el estado vacio.
+    mock_run.assert_not_called()
+    mock_st.dataframe.assert_not_called()
     mock_st.info.assert_not_called()

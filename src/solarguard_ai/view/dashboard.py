@@ -17,15 +17,10 @@ import streamlit as st
 from plotly.graph_objects import Figure
 
 from solarguard_ai.view.historial import AnalysisRecord, normalize_priority
+from solarguard_ai.view.rotulos import PRIORITY_LABELS
 
 _KNOWN_PRIORITIES = frozenset({"high", "medium", "low"})
 _PRIORITY_ORDER = ("high", "medium", "low")
-_PRIORITY_LABELS = {
-    "high": "Alta",
-    "medium": "Media",
-    "low": "Baja",
-    "unknown": "Desconocida",
-}
 _EMPTY_HISTORY_MESSAGE = (
     "Todavia no hay analisis registrados en esta sesion. "
     "Suba la imagen de un panel solar para comenzar."
@@ -83,7 +78,7 @@ def build_priority_distribution_chart(by_priority: Mapping[str, int]) -> Figure:
         if priority not in _PRIORITY_ORDER
     )
     items = known_items + other_items
-    labels = [_PRIORITY_LABELS.get(priority, priority) for priority, _ in items]
+    labels = [PRIORITY_LABELS.get(priority, priority) for priority, _ in items]
     counts = [count for _, count in items]
     frame = pd.DataFrame({"Prioridad": labels, "Cantidad": counts})
     return px.bar(
@@ -136,12 +131,13 @@ def render_dashboard(records: Sequence[AnalysisRecord]) -> None:
 
 
 def _render_metrics(stats: DashboardStats) -> None:
-    columns = st.columns(5)
-    columns[0].metric("Total de analisis", stats.total)
-    columns[1].metric("Prioridad Alta", stats.by_priority.get("high", 0))
-    columns[2].metric("Prioridad Media", stats.by_priority.get("medium", 0))
-    columns[3].metric("Prioridad Baja", stats.by_priority.get("low", 0))
-    columns[4].metric("Requieren revision humana", stats.requires_human_review)
+    first_row = st.columns(3)
+    first_row[0].metric("Total de analisis", stats.total)
+    first_row[1].metric("Prioridad Alta", stats.by_priority.get("high", 0))
+    first_row[2].metric("Prioridad Media", stats.by_priority.get("medium", 0))
+    second_row = st.columns(2)
+    second_row[0].metric("Prioridad Baja", stats.by_priority.get("low", 0))
+    second_row[1].metric("Requieren revision humana", stats.requires_human_review)
 
 
 def _render_unexpected_priority_warning(by_priority: Mapping[str, int]) -> None:

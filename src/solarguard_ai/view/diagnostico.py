@@ -16,6 +16,8 @@ from typing import TYPE_CHECKING
 
 import streamlit as st
 
+from solarguard_ai.view.rotulos import format_priority_label
+
 if TYPE_CHECKING:
     from solarguard_ai.inferencia import PredictionResult
     from solarguard_ai.priorizacion import PrioritizationError, PriorityResult
@@ -33,11 +35,13 @@ _DIAGNOSIS_DISCLAIMER = (
 
 def render_diagnosis(prediction: PredictionResult, priority: PriorityResult) -> None:
     """Muestra el diagnostico completo: clasificacion y prioridad."""
-    st.subheader("Diagnostico visual preliminar")
-    st.markdown(f"_{_DIAGNOSIS_DISCLAIMER}_")
-    render_prediction(prediction)
-    render_probabilities(prediction.probabilities)
-    render_priority(priority)
+    with st.container(border=True):
+        st.subheader("Diagnostico visual preliminar")
+        st.markdown(f"_{_DIAGNOSIS_DISCLAIMER}_")
+        render_prediction(prediction)
+        render_priority(priority)
+    with st.expander("Probabilidades por clase"):
+        render_probabilities(prediction.probabilities)
 
 
 def render_prediction(prediction: PredictionResult) -> None:
@@ -55,7 +59,6 @@ def render_prediction(prediction: PredictionResult) -> None:
 
 def render_probabilities(probabilities: dict[str, float]) -> None:
     """Muestra las probabilidades por clase, de mayor a menor."""
-    st.subheader("Probabilidades por clase")
     ordered = sorted(probabilities.items(), key=lambda item: item[1], reverse=True)
     for class_name, probability in ordered:
         st.markdown(f"**{class_name}:** {probability:.2%}")
@@ -65,7 +68,7 @@ def render_probabilities(probabilities: dict[str, float]) -> None:
 def render_priority(priority: PriorityResult) -> None:
     """Muestra la prioridad, la accion recomendada y su justificacion."""
     st.subheader("Prioridad de mantenimiento")
-    st.markdown(f"**Prioridad:** {priority.priority}")
+    st.metric(label="Prioridad", value=format_priority_label(priority.priority))
     st.markdown(f"**Accion recomendada:** {priority.recommended_action}")
     st.markdown(f"**Razon:** {priority.reason}")
     if priority.requires_human_review:

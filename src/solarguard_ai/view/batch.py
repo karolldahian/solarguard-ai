@@ -17,8 +17,9 @@ La deduplicacion reutiliza el fingerprint SHA-256 de ``historial``. El
 fingerprint se usa internamente para decidir si una imagen ya fue analizada
 (en el historial o en el mismo lote) y nunca se persiste: el resumen
 almacenado en ``st.session_state`` contiene unicamente la metadata necesaria
-para representar los resultados (nombres, estados, clase, confianza y
-prioridad). Nunca se almacenan bytes de imagen en ``st.session_state``.
+para representar los resultados (nombres, estados, clase, confianza,
+prioridad, revision humana y accion recomendada). Nunca se almacenan bytes
+de imagen en ``st.session_state``.
 """
 
 from __future__ import annotations
@@ -57,6 +58,7 @@ from solarguard_ai.view.modelo import (
     resolve_model_path,
 )
 from solarguard_ai.view.pagina_principal import upload_images
+from solarguard_ai.view.rotulos import format_priority_label
 
 if TYPE_CHECKING:
     from solarguard_ai.inferencia import PredictionResult, SolarScanInference
@@ -82,7 +84,7 @@ _EMPTY_BATCH_MESSAGE = (
 _STATE_LABELS = {
     "processed": "Procesada",
     "failed": "Fallida",
-    "duplicate": "Duplicada (ya registrada)",
+    "duplicate": "Duplicada",
 }
 
 
@@ -96,6 +98,8 @@ class BatchImageResult:
     confidence: float | None = None
     priority: str | None = None
     error_message: str | None = None
+    requires_human_review: bool | None = None
+    recommended_action: str | None = None
 
 
 @dataclass(frozen=True)
@@ -207,6 +211,8 @@ def run_batch_analysis(
                     predicted_class=record.predicted_class,
                     confidence=record.confidence,
                     priority=record.priority,
+                    requires_human_review=priority.requires_human_review,
+                    recommended_action=priority.recommended_action,
                 )
             )
         else:
@@ -227,13 +233,25 @@ def run_batch_analysis(
 
 def build_batch_results_table(summary: BatchSummary) -> pd.DataFrame:
     """Construye la tabla plana de resultados del lote (funcion pura)."""
-    columns = ["Imagen", "Condicion", "Confianza", "Prioridad", "Estado"]
+    columns = [
+        "Imagen",
+        "Condicion",
+        "Confianza",
+        "Prioridad",
+        "Revision humana",
+        "Accion recomendada",
+        "Estado",
+    ]
     rows = [
         {
             "Imagen": result.image_name,
             "Condicion": result.predicted_class or "-",
             "Confianza": _format_confidence(result.confidence),
-            "Prioridad": result.priority or "-",
+            "Prioridad": (
+                format_priority_label(result.priority) if result.priority else "-"
+            ),
+            "Revision humana": _format_human_review(result),
+            "Accion recomendada": result.recommended_action or "-",
             "Estado": _status_label(result),
         }
         for result in summary.results
@@ -241,6 +259,62 @@ def build_batch_results_table(summary: BatchSummary) -> pd.DataFrame:
     if not rows:
         return pd.DataFrame(columns=columns)
     return pd.DataFrame(rows, columns=columns)
+
+
+def build_batch_failure_details(
+    summary: BatchSummary,
+) -> tuple[tuple[str, str], ...]:
+    """Devuelve los detalle de error de los archivos fallidos con mensaje.
+
+    Los resultados fallidos sin mensaje no se incluyen: el detalle se
+    muestra aparte de la tabla para mantener corta la columna Estado.
+    """
+    return tuple(
+        (result.image_name, result.error_message)
+        for result in summary.results
+        if result.status == "failed" and result.error_message is not None
+    )
+
+
+@dataclass(frozen=True)
+class BatchAlertSummary:
+    """Conteos de alertas del lote derivados solo de resultados procesados.
+
+    No contiene prioridades de archivos fallidos o duplicados: esos no se
+    cuentan como diagnosticos. ``unknown`` y otras prioridades no esperadas
+    tampoco se convierten silenciosamente en una prioridad conocida.
+    """
+
+    high: int
+    medium: int
+    low: int
+    requires_human_review: int
+
+
+def build_batch_alert_summary(summary: BatchSummary) -> BatchAlertSummary:
+    """Cuenta las alertas del lote a partir del ``BatchSummary`` (funcion pura).
+
+    Solo considera resultados procesados: los archivos fallidos y duplicados
+    no inflan las metricas. La revision humana se cuenta sobre los resultados
+    procesados que la requieren.
+    """
+    counts = {"high": 0, "medium": 0, "low": 0}
+    requires_human_review = 0
+
+    for result in summary.results:
+        if result.status != "processed":
+            continue
+        if result.priority in counts:
+            counts[result.priority] += 1
+        if result.requires_human_review:
+            requires_human_review += 1
+
+    return BatchAlertSummary(
+        high=counts["high"],
+        medium=counts["medium"],
+        low=counts["low"],
+        requires_human_review=requires_human_review,
+    )
 
 
 def render_batch_analysis() -> None:
@@ -251,16 +325,8 @@ def render_batch_analysis() -> None:
     uploaded_files = upload_images()
     current_names = _names_of(uploaded_files)
 
-    stored_summary = st.session_state.get(_SESSION_SUMMARY_KEY)
-    stored_names = st.session_state.get(_SESSION_NAMES_KEY)
-    if stored_summary is not None and stored_names == current_names and current_names:
-        render_batch_results(stored_summary)
-
-    if not uploaded_files:
-        st.info(_EMPTY_BATCH_MESSAGE)
-        return
-
-    if st.button("Analizar lote"):
+    run_clicked = bool(uploaded_files) and st.button("Analizar lote")
+    if run_clicked:
         service = _resolve_inference_service()
         if service is None:
             return
@@ -296,6 +362,28 @@ def render_batch_analysis() -> None:
         st.session_state[_SESSION_SUMMARY_KEY] = summary
         st.session_state[_SESSION_NAMES_KEY] = current_names
         render_batch_results(summary)
+        return
+
+    stored_summary = _stored_summary_for(current_names)
+    if stored_summary is not None:
+        render_batch_results(stored_summary)
+    if not uploaded_files:
+        st.info(_EMPTY_BATCH_MESSAGE)
+
+
+def _stored_summary_for(current_names: tuple[str, ...]) -> BatchSummary | None:
+    """Devuelve el ultimo resumen almacenado solo si coincide con el lote actual.
+
+    Evita mostrar resultados de un conjunto de archivos distinto al que
+    esta cargado en este rerun.
+    """
+    if not current_names:
+        return None
+    stored_summary = st.session_state.get(_SESSION_SUMMARY_KEY)
+    stored_names = st.session_state.get(_SESSION_NAMES_KEY)
+    if stored_summary is None or stored_names != current_names:
+        return None
+    return stored_summary
 
 
 def render_batch_results(summary: BatchSummary) -> None:
@@ -315,6 +403,23 @@ def render_batch_results(summary: BatchSummary) -> None:
         use_container_width=True,
         hide_index=True,
     )
+    render_batch_alert_summary(summary)
+    failures = build_batch_failure_details(summary)
+    if failures:
+        with st.expander("Detalle de archivos fallidos"):
+            for image_name, error_message in failures:
+                st.markdown(f"- **{image_name}:** {error_message}")
+
+
+def render_batch_alert_summary(summary: BatchSummary) -> None:
+    """Muestra el resumen de alertas del lote calculado, sin datos inventados."""
+    st.subheader("Resumen de alertas del lote")
+    alert_summary = build_batch_alert_summary(summary)
+    columns = st.columns(4)
+    columns[0].metric("Prioridad Alta", alert_summary.high)
+    columns[1].metric("Prioridad Media", alert_summary.medium)
+    columns[2].metric("Prioridad Baja", alert_summary.low)
+    columns[3].metric("Requieren revision humana", alert_summary.requires_human_review)
 
 
 def _resolve_inference_service() -> SolarScanInference | None:
@@ -355,10 +460,13 @@ def _names_of(files: object | None) -> tuple[str, ...]:
 
 
 def _status_label(result: BatchImageResult) -> str:
-    label = _STATE_LABELS.get(result.status, result.status)
-    if result.status == "failed" and result.error_message:
-        return f"Fallida: {result.error_message}"
-    return label
+    return _STATE_LABELS.get(result.status, result.status)
+
+
+def _format_human_review(result: BatchImageResult) -> str:
+    if result.requires_human_review is None:
+        return "-"
+    return "Si" if result.requires_human_review else "No"
 
 
 def _format_confidence(confidence: float | None) -> str:
@@ -374,11 +482,15 @@ def _notify_progress(
 
 __all__ = [
     "AnalyzeOne",
+    "BatchAlertSummary",
     "BatchImageResult",
     "BatchImageStatus",
     "BatchSummary",
     "ProgressCallback",
+    "build_batch_alert_summary",
+    "build_batch_failure_details",
     "build_batch_results_table",
+    "render_batch_alert_summary",
     "render_batch_analysis",
     "render_batch_results",
     "run_batch_analysis",

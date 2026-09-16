@@ -29,14 +29,18 @@ from solarguard_ai.view.pagina_principal import (
     render_header,
     render_image_metadata,
     render_image_preview,
+    render_usage_guide,
     upload_image,
 )
 
 st.set_page_config(page_title="SolarGuard AI", page_icon="☀️", layout="wide")
 
 render_header()
+render_usage_guide()
 
-individual_tab, batch_tab = st.tabs(["Analisis individual", "Analisis por lote"])
+individual_tab, batch_tab, summary_tab = st.tabs(
+    ["Analisis individual", "Analisis por lote", "Resumen de la sesion"]
+)
 
 with individual_tab:
     uploaded_file = upload_image()
@@ -95,5 +99,6 @@ with individual_tab:
 with batch_tab:
     render_batch_analysis()
 
-render_dashboard(get_history())
-render_risk_heatmap(get_history())
+with summary_tab:
+    render_dashboard(get_history())
+    render_risk_heatmap(get_history())

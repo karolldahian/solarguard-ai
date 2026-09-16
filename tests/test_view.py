@@ -11,6 +11,7 @@ from solarguard_ai.view.pagina_principal import (
     render_header,
     render_image_metadata,
     render_image_preview,
+    render_usage_guide,
     upload_image,
 )
 
@@ -83,3 +84,15 @@ def test_render_header_muestra_titulo(mock_st: MagicMock) -> None:
     mock_st.markdown.assert_called_once()
     texto = mock_st.markdown.call_args.args[0]
     assert "monitoreo" in texto.lower() or "panel" in texto.lower()
+
+
+@patch("solarguard_ai.view.pagina_principal.st")
+def test_render_usage_guide_muestra_tres_pasos(mock_st: MagicMock) -> None:
+    render_usage_guide()
+
+    markdown_calls = [c.args[0] for c in mock_st.markdown.call_args_list]
+    assert len(markdown_calls) == 4
+    assert any(call.startswith("1.") for call in markdown_calls)
+    assert any(call.startswith("2.") for call in markdown_calls)
+    assert any(call.startswith("3.") for call in markdown_calls)
+    assert any("panel" in call.lower() for call in markdown_calls)

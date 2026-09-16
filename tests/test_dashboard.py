@@ -1,6 +1,6 @@
 """Pruebas del dashboard de sesion de SolarGuard AI (view/dashboard.py)."""
 
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 from solarguard_ai.view.dashboard import (
     DashboardStats,
@@ -142,12 +142,16 @@ def test_render_dashboard_muestra_metricas_y_graficos() -> None:
         _make_record(image_name="b.jpg", priority="low"),
     ]
     with patch("solarguard_ai.view.dashboard.st") as mock_st:
+        mock_st.columns.side_effect = [
+            (MagicMock(), MagicMock(), MagicMock()),
+            (MagicMock(), MagicMock()),
+        ]
         # Act
         render_dashboard(records)
 
-    # Assert
+    # Assert: metricas en dos filas (3+2) y ambos graficos.
     mock_st.info.assert_not_called()
-    mock_st.columns.assert_called_once_with(5)
+    assert [call.args[0] for call in mock_st.columns.call_args_list] == [3, 2]
     assert mock_st.plotly_chart.call_count == 2
     assert mock_st.warning.call_count == 0
 

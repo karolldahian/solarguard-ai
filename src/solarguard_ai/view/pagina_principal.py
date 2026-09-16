@@ -19,6 +19,17 @@ def render_header() -> None:
     )
 
 
+def render_usage_guide() -> None:
+    """Muestra una guia breve de 3 pasos para un usuario de primera vez."""
+    st.markdown("**Como usar SolarGuard AI:**")
+    st.markdown("1. Suba una imagen (o varias) de paneles solares.")
+    st.markdown("2. Revise el diagnostico, la confianza y la prioridad.")
+    st.markdown(
+        "3. Consulte el dashboard y el mapa de calor de la sesion "
+        "para las recomendaciones de mantenimiento."
+    )
+
+
 def upload_image():
     """Muestra el widget de carga de imagen y retorna el archivo subido."""
     return st.file_uploader(

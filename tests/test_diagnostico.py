@@ -132,8 +132,8 @@ def test_render_priority_sin_revision_no_emite_warning(
 
     render_priority(priority)
 
+    mock_st.metric.assert_called_once_with(label="Prioridad", value="Alta")
     markdown_calls = [c.args[0] for c in mock_st.markdown.call_args_list]
-    assert any("high" in call for call in markdown_calls)
     assert any("inspeccion tecnica" in call.lower() for call in markdown_calls)
     mock_st.warning.assert_not_called()
 
@@ -182,6 +182,7 @@ def test_render_diagnosis_incluye_descargo_y_compone_secciones(
     assert any("validacion tecnica" in call.lower() for call in markdown_calls)
     subheaders = [c.args[0] for c in mock_st.subheader.call_args_list]
     assert "Diagnostico visual preliminar" in subheaders
+    mock_st.expander.assert_called_once_with("Probabilidades por clase")
     mock_st.warning.assert_called()
 
 

@@ -6,9 +6,12 @@ from solarguard_ai.view.alertas import (
     validate_panel_id,
 )
 from solarguard_ai.view.batch import (
+    BatchAlertSummary,
     BatchImageResult,
     BatchSummary,
+    build_batch_alert_summary,
     build_batch_results_table,
+    render_batch_alert_summary,
     render_batch_analysis,
     render_batch_results,
     run_batch_analysis,
@@ -58,11 +61,13 @@ from solarguard_ai.view.pagina_principal import (
 
 __all__ = [
     "AnalysisRecord",
+    "BatchAlertSummary",
     "BatchImageResult",
     "BatchSummary",
     "RiskMatrix",
     "add_analysis",
     "build_analysis_record",
+    "build_batch_alert_summary",
     "build_batch_results_table",
     "build_class_distribution_chart",
     "build_priority_distribution_chart",
@@ -75,6 +80,7 @@ __all__ = [
     "get_priority_config",
     "normalize_priority",
     "register_analysis",
+    "render_batch_alert_summary",
     "render_batch_analysis",
     "render_batch_results",
     "render_configuration_error",
