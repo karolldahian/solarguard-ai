@@ -155,6 +155,10 @@ def log_prediction(
     if not is_enabled():
         return
 
+    # Inicializar cliente y URI antes de loguear
+    _ = _get_client()
+    _ = _get_config()
+
     metrics = {
         "confidence": confidence,
         "latency_ms": latency_ms,
@@ -241,6 +245,9 @@ def log_pipeline_request(
     if not is_enabled():
         return
 
+    _ = _get_client()
+    _ = _get_config()
+
     with mlflow.start_run(run_name=f"pipeline-{panel_id}", nested=True):
         metrics = {
             "total_latency_ms": total_latency_ms,
@@ -306,6 +313,9 @@ def log_streamlit_request(
     if not is_enabled():
         return
 
+    _ = _get_client()
+    _ = _get_config()
+
     with mlflow.start_run(run_name=f"streamlit-{panel_id}", nested=True):
         metrics = {
             "streamlit_total_latency_ms": total_latency_ms,
@@ -360,6 +370,9 @@ def log_error(
     """
     if not is_enabled():
         return
+
+    _ = _get_client()
+    _ = _get_config()
 
     with mlflow.start_run(run_name=f"error-{error_type}", nested=True):
         tags = {

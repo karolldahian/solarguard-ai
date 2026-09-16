@@ -306,3 +306,8 @@ __all__ = [
     "_construir_servidor",
     "iniciar_servidor",
 ]
+
+
+if __name__ == '__main__':
+    main()
+
