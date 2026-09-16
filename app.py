@@ -18,6 +18,7 @@ from solarguard_ai.view.historial import (
     build_analysis_record,
     get_history,
 )
+from solarguard_ai.view.mapa_riesgo import render_risk_heatmap
 from solarguard_ai.view.modelo import (
     get_inference_service,
     get_priority_config,
@@ -88,3 +89,4 @@ else:
     st.info("Suba una imagen de un panel solar para comenzar el analisis.")
 
 render_dashboard(get_history())
+render_risk_heatmap(get_history())

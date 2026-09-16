@@ -28,6 +28,12 @@ from solarguard_ai.view.historial import (
     normalize_priority,
     register_analysis,
 )
+from solarguard_ai.view.mapa_riesgo import (
+    RiskMatrix,
+    build_risk_heatmap,
+    build_risk_matrix,
+    render_risk_heatmap,
+)
 from solarguard_ai.view.modelo import (
     get_inference_service,
     get_priority_config,
@@ -43,10 +49,13 @@ from solarguard_ai.view.pagina_principal import (
 
 __all__ = [
     "AnalysisRecord",
+    "RiskMatrix",
     "add_analysis",
     "build_analysis_record",
     "build_class_distribution_chart",
     "build_priority_distribution_chart",
+    "build_risk_heatmap",
+    "build_risk_matrix",
     "compute_dashboard_stats",
     "compute_image_fingerprint",
     "get_history",
@@ -64,6 +73,7 @@ __all__ = [
     "render_prediction",
     "render_priority",
     "render_probabilities",
+    "render_risk_heatmap",
     "render_ticket_result",
     "render_ticket_section",
     "resolve_model_path",
