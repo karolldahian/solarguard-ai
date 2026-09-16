@@ -7,10 +7,16 @@ from solarguard_ai.ingesta import ImageIngestionError, load_image
 from solarguard_ai.preprocesamiento import preprocess_for_solarscan
 from solarguard_ai.priorizacion import PrioritizationError, prioritize_prediction
 from solarguard_ai.view.alertas import render_ticket_section
+from solarguard_ai.view.dashboard import render_dashboard
 from solarguard_ai.view.diagnostico import (
     render_configuration_error,
     render_diagnosis,
     render_model_unavailable,
+)
+from solarguard_ai.view.historial import (
+    add_analysis,
+    build_analysis_record,
+    get_history,
 )
 from solarguard_ai.view.modelo import (
     get_inference_service,
@@ -71,5 +77,14 @@ if uploaded_file is not None:
                             prediction.predicted_class,
                             prediction.confidence,
                         )
+                        analysis_record = build_analysis_record(
+                            image_name=loaded.source,
+                            image_bytes=uploaded_file.getvalue(),
+                            prediction=prediction,
+                            priority=priority,
+                        )
+                        add_analysis(analysis_record)
 else:
     st.info("Suba una imagen de un panel solar para comenzar el analisis.")
+
+render_dashboard(get_history())
