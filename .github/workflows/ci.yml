@@ -50,5 +50,5 @@ jobs:
       - name: Verify Ruff Code Formatting
         run: uv run ruff format --check .
 
-      - name: Run Pytest Test Suite
-        run: uv run pytest -v
+      - name: Run Pytest Test Suite with Coverage
+        run: uv run pytest -v --cov --cov-report=term-missing

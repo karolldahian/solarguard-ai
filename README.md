@@ -3,7 +3,7 @@
 [![Python 3.13](https://img.shields.io/badge/Python-3.13-3776AB?logo=python&logoColor=white)](https://www.python.org/)
 [![Package Manager Astral UV](https://img.shields.io/badge/Package%20Manager-Astral%20uv-DE5FE9?logo=astral&logoColor=white)](https://docs.astral.sh/uv/)
 [![Linter & Formatter Ruff](https://img.shields.io/badge/Linter%20%26%20Format-Ruff-D7FF64?logo=ruff&logoColor=black)](https://astral.sh/ruff)
-[![Tests Pytest](https://img.shields.io/badge/Tests-139%20passed-4E9A06?logo=pytest&logoColor=white)](https://pytest.org/)
+[![Tests Pytest](https://img.shields.io/badge/Tests-284%20passed-4E9A06?logo=pytest&logoColor=white)](https://pytest.org/)
 [![Model Hugging Face](https://img.shields.io/badge/Model-solarscan--yolov8n--cls-FFD21E?logo=huggingface&logoColor=black)](https://huggingface.co/SaifElgalaly/solarscan-yolov8n-cls)
 [![Runtime ONNX](https://img.shields.io/badge/Runtime-ONNX%20Runtime-005CED?logo=onnx&logoColor=white)](https://onnxruntime.ai/)
 [![CI Pipeline](https://img.shields.io/badge/CI%2FCD-GitHub%20Actions-2088FF?logo=githubactions&logoColor=white)](.github/workflows/ci.yml)
@@ -150,9 +150,10 @@ Para transformar la IA en valor operativo de campo, SolarGuard AI asigna automá
    make status
    ```
 
-4. **Ejecutar la suite completa de pruebas:**
+4. **Ejecutar la suite de pruebas y la validación de calidad:**
    ```bash
-   make test
+   make test    # 284 pruebas unitarias (rápido, sin cobertura)
+   make check   # linters + formato + pruebas con cobertura (mínimo 80%; actual 89.90%)
    ```
 
 5. **(Opcional) Descargar los pesos ONNX del modelo:**
@@ -168,8 +169,8 @@ El proyecto cuenta con un `Makefile` estandarizado para maximizar la productivid
 | :--- | :---: | :--- |
 | `make help` | Ayuda | Muestra el menú de comandos disponibles con sus descripciones. |
 | `make status` | Diagnóstico | Ejecuta el reporte del entorno, módulos y dependencias. |
-| `make test` | Calidad | Corre las **139 pruebas unitarias** con Pytest en modo detallado (`-v`). |
-| `make check` | Calidad | Ejecuta validación de linters (`ruff check`), formato y `uv lock --check`. |
+| `make test` | Calidad | Corre las **284 pruebas unitarias** con Pytest en modo detallado (`-v`), sin cobertura (ejecución rápida). |
+| `make check` | Calidad | Valida linters (`ruff check`), formato y `uv lock --check`, y ejecuta Pytest con cobertura de `solarguard_ai` (falla si baja del **80%**). |
 | `make format` | Calidad | Aplica corrección automática de estilos y formato con Ruff. |
 | `make gga` | Calidad | Ejecuta auditoría de arquitectura con Gentleman Guardian Angel. |
 | `make gga-pr` | Calidad | Audita el Pull Request actual contra `main` usando GGA con OpenCode. |
@@ -183,6 +184,8 @@ El proyecto cuenta con un `Makefile` estandarizado para maximizar la productivid
 | `make mlflow-ui` | MLflow | Inicia la interfaz web de MLflow en puerto 5000. |
 | `make mlflow-clean` | Mantenimiento | Elimina runs locales de MLflow (`mlruns/`). |
 | `make clean`    | Mantenimiento | Elimina cachés locales (`__pycache__`, `.pytest_cache`, `.ruff_cache`). |
+
+> **Integración Continua (CI):** El pipeline de GitHub Actions ejecuta Ruff, verificación de formato y Pytest con cobertura de `solarguard_ai` en Ubuntu y Windows, y falla automáticamente si la cobertura global cae por debajo del **80%**.
 
 ---
 
@@ -331,7 +334,7 @@ SolarGuard AI cumple rigurosamente con los criterios de evaluación del **Módul
 │                      │       │ Fibonacci, roles y ruta crítica (Gantt).│
 │ 4. Backend           │  15%  │ Servidor desacoplado (gRPC / FastAPI)   │
 │                      │       │ documentado en docs/arquitectura.md.    │
-│ 5. QA & GitFlow      │  15%  │ 139 tests (AAA), Ruff, CI/CD en GitHub  │
+│ 5. QA & GitFlow      │  15%  │ 284 tests (AAA), Ruff, CI/CD en GitHub  │
 │                      │       │ Actions y Conventional Commits.         │
 │ 6. Sustentación & MC │  10%  │ Model Card formal y diapositivas de     │
 │                      │       │ defensa técnica del prototipo.          │

@@ -89,7 +89,7 @@ format:
 check: lock-check compile
 	uv run ruff check .
 	uv run ruff format --check .
-	uv run pytest -q
+	uv run pytest -q --cov --cov-report=term-missing
 
 gga:
 	@echo "Ejecutando Gentleman Guardian Angel sobre cambios locales..."
