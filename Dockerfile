@@ -10,7 +10,7 @@ ENV PYTHONUNBUFFERED=1 \
 # Instala dependencias del sistema necesarias
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
-    libgl1-mesa-glx \
+    libgl1 \
     libglib2.0-0 \
     curl \
     && rm -rf /var/lib/apt/lists/*
@@ -31,8 +31,8 @@ RUN uv sync --frozen --no-dev
 # Copia el resto del código
 COPY . .
 
-# Expone los puertos (Streamlit: 8501, FastAPI: 8000, gRPC: 50051)
-EXPOSE 8501 8000 50051
+# Expone los puertos (Streamlit: 8501, gRPC: 50051, MLflow: 5000)
+EXPOSE 8501 50051 5000
 
 # Comando por defecto (inicia el frontend por ahora)
 CMD ["uv", "run", "streamlit", "run", "app.py", "--server.port=8501", "--server.address=0.0.0.0"]

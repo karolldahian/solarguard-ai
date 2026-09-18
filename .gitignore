@@ -228,3 +228,9 @@ models/*.keras
 *.pth
 *.tflite
 *.bin
+
+# MLflow local tracking y bases de datos
+mlruns/
+mlflow.db
+*.db
+*.sqlite3

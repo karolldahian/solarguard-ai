@@ -316,7 +316,31 @@ make mlflow-clean  # Elimina directorio mlruns/
 
 ---
 
-## 9. Alineación con la Rúbrica Académica (Módulo 3)
+## 9. Despliegue y Orquestación con Docker
+
+SolarGuard AI se encuentra totalmente contenerizado mediante una imagen base unificada (**Python 3.13-slim**) y orquestación multicontenedor con **Docker Compose**:
+
+- **`solarguard-backend`:** Servidor gRPC en el puerto `50051`.
+- **`solarguard-frontend`:** Dashboard reactivo Streamlit en el puerto `8501`.
+- **`solarguard-mlflow`:** Servidor de tracking y métricas MLflow en el puerto `5000`.
+
+### 9.1. Comandos de Operación Rápida
+```bash
+# Construir y levantar el ecosistema completo en segundo plano
+make docker-up
+
+# Consultar logs en tiempo real
+make docker-logs
+
+# Detener los contenedores
+make docker-down
+```
+
+Para más detalles sobre la arquitectura de red interna, volúmenes persistentes y variables de entorno, consulte la [Guía de Despliegue con Docker](docs/despliegue_docker.md).
+
+---
+
+## 10. Alineación con la Rúbrica Académica (Módulo 3)
 
 SolarGuard AI cumple rigurosamente con los criterios de evaluación del **Módulo 3: Aplicación Completa (25% de la nota final)**:
 
@@ -343,11 +367,13 @@ SolarGuard AI cumple rigurosamente con los criterios de evaluación del **Módul
 
 ---
 
-## 9. Estructura del Repositorio
+## 11. Estructura del Repositorio
 
 ```text
 solarguard-ai/
 ├── Dockerfile                         # Contenedorización de la aplicación completa
+├── docker-compose.yaml                # Orquestación de backend gRPC, Streamlit y MLflow
+├── .dockerignore                      # Exclusiones de contexto para construcción Docker
 ├── .github/
 │   └── workflows/
 │       └── ci.yml                     # Pipeline de integración continua (GitHub Actions)
@@ -355,17 +381,19 @@ solarguard-ai/
 │   ├── prioritization.toml            # Configuración de umbrales operativos de revisión
 │   └── mlflow.toml                    # Configuración de MLflow Tracking
 ├── docs/
-│   └── arquitectura.md                # Diagramas C4, contratos y especificación OpenAPI
+│   ├── arquitectura.md                # Diagramas C4, contratos y especificación OpenAPI
+│   ├── arquitectura.html              # Diagrama interactivo de infraestructura (Archify)
+│   ├── despliegue_docker.md           # Guía de orquestación y despliegue con Docker
+│   └── model_card.md                  # Especificación formal del modelo SolarScan YOLOv8n
 ├── proto/
-│   └── solarguard.proto
+│   └── solarguard.proto               # Contrato Protocol Buffers para gRPC
 ├── scripts/
-│   ├── grpc_gen.py
+│   ├── grpc_gen.py                    # Generador de stubs gRPC
 │   └── status.py                      # Diagnóstico del entorno y reporte de componentes
 ├── src/
 │   └── solarguard_ai/
-│       ├── grpc_interface/
-│       │   ├── solarguard_pb2.py
-│       │   └── solarguard_pb2_grpc.py
+│       ├── grpc_interface/           # Código generado de gRPC (pb2 y pb2_grpc)
+│       ├── view/                     # Capa de presentación y componentes Streamlit
 │       ├── __init__.py                # Entrypoint del paquete
 │       ├── ingesta.py                 # Validación y carga de imágenes RGB
 │       ├── preprocesamiento.py        # Normalización y tensores para SolarScan
@@ -373,20 +401,13 @@ solarguard-ai/
 │       ├── priorizacion.py            # Motor de reglas y prioridades operativas
 │       ├── tickets.py                 # Generación y despacho de tickets en GitHub Issues
 │       ├── mlflow_tracking.py         # Cliente MLflow y logging de métricas
-│       ├── servidor_grpc.py
-│       └── cliente_grpc.py
-├── tests/
-│   ├── test_ingesta.py                # Pruebas de validación de archivos e imágenes
-│   ├── test_preprocesamiento.py       # Pruebas de recorte, canales y dimensiones
-│   ├── test_inferencia.py             # Pruebas de sesiones ONNX, logits y caché
-│   ├── test_priorizacion.py           # Pruebas de matriz de severidad y umbrales
-│   ├── test_tickets.py                # Pruebas de formato, asignación y cliente GitHub
-│   ├── test_mlflow.py                 # Pruebas de MLflow tracking
-│   └── test_grpc.py                   # Pruebas de integración gRPC
-├── app.py
+│       ├── servidor_grpc.py           # Servidor gRPC de inferencia
+│       └── cliente_grpc.py            # Cliente stub gRPC
+├── tests/                             # Suite completa de pruebas unitarias (284 tests)
+├── app.py                             # Aplicación web interactiva Streamlit
 ├── .python-version                    # Definición estricta de Python 3.13
 ├── LICENSE
-├── Makefile                           # Automatización categorizada de tareas
+├── Makefile                           # Automatización categorizada de tareas (Make)
 ├── README.md                          # Documentación maestra del proyecto
 ├── pyproject.toml                     # Definición de dependencias con Astral UV
 └── uv.lock                            # Archivo de bloqueo reproducible
@@ -394,7 +415,7 @@ solarguard-ai/
 
 ---
 
-## 10. Seguridad y Uso Responsable
+## 12. Seguridad y Uso Responsable
 
 - **No Diagnóstico Definitivo:** Las clasificaciones emitidas por SolarGuard AI corresponden a una auditoría visual preliminar y no sustituyen una prueba eléctrica de curvas I-V ni mediciones de aislamiento con megóhmetro.
 - **Seguridad Eléctrica:** Antes de intervenir cualquier panel reportado con `Electrical-damage`, la cuadrilla técnica debe aislar el string correspondiente, verificar ausencia de tensión y utilizar EPP dieléctrico clase 0.
@@ -402,7 +423,7 @@ solarguard-ai/
 
 ---
 
-## 11. Equipo de Desarrollo
+## 13. Equipo de Desarrollo
 
 Proyecto académico desarrollado en la **Especialización en Inteligencia Artificial** de la **Universidad Autónoma de Occidente (UAO)**:
 
@@ -413,6 +434,6 @@ Proyecto académico desarrollado en la **Especialización en Inteligencia Artifi
 
 ---
 
-## 12. Licencia
+## 14. Licencia
 
 Este software se distribuye bajo los términos de la licencia [MIT](LICENSE).
