@@ -3,7 +3,7 @@
 # Especialización en Inteligencia Artificial — Universidad Autónoma de Occidente
 # ==============================================================================
 
-.PHONY: help status run streamlit backend install sync test check format clean lock-check compile gga gga-pr pre-commit pre-commit-install grpc-gen servidor mlflow-ui mlflow-clean
+.PHONY: help status run streamlit backend install sync test check format clean lock-check compile gga gga-pr pre-commit pre-commit-install grpc-gen servidor mlflow-ui mlflow-clean docker-build docker-up docker-down docker-logs
 
 help:
 	@echo ====================================================================
@@ -16,6 +16,12 @@ help:
 	@echo   make backend      - Inicia el servidor backend gRPC (cuando este disponible)
 	@echo   make grpc-gen     - Regenera el codigo gRPC desde proto/solarguard.proto
 	@echo   make servidor     - Inicia el backend gRPC (alias de backend)
+	@echo --------------------------------------------------------------------
+	@echo [DOCKER Y ORQUESTACION]
+	@echo   make docker-build - Construye las imagenes de contenedor con Docker Compose
+	@echo   make docker-up    - Levanta frontend, backend y MLflow en contenedores
+	@echo   make docker-down  - Detiene y remueve los contenedores orquestados
+	@echo   make docker-logs  - Muestra los logs en tiempo real de los contenedores
 	@echo --------------------------------------------------------------------
 	@echo [MLFLOW TRACKING]
 	@echo   make mlflow-ui    - Inicia la interfaz web de MLflow (puerto 5000)
@@ -131,3 +137,20 @@ mlflow-clean:
 	@echo Limpiando runs locales de MLflow...
 	@python -c "import pathlib, shutil; [shutil.rmtree(p, ignore_errors=True) for p in pathlib.Path('.').rglob('mlruns')]"
 	@echo Limpieza de MLflow completada.
+
+# ------------------------------------------------------------------------------
+# Docker y Orquestacion
+# ------------------------------------------------------------------------------
+
+docker-build:
+	docker compose build
+
+docker-up:
+	docker compose up -d
+
+docker-down:
+	docker compose down
+
+docker-logs:
+	docker compose logs -f
+

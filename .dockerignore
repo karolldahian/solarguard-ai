@@ -1,0 +1,17 @@
+.git
+.github
+.venv
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache
+.coverage
+htmlcov
+mlruns
+mlflow.db
+models/*.onnx
+models/*.pt
+.ruff_cache
+.idea
+.vscode
