@@ -122,11 +122,11 @@ def render_dashboard(records: Sequence[AnalysisRecord]) -> None:
     _render_unexpected_priority_warning(stats.by_priority)
     st.plotly_chart(
         build_priority_distribution_chart(stats.by_priority),
-        use_container_width=True,
+        width="stretch",
     )
     st.plotly_chart(
         build_class_distribution_chart(stats.by_class),
-        use_container_width=True,
+        width="stretch",
     )
 
 

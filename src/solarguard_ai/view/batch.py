@@ -400,7 +400,7 @@ def render_batch_results(summary: BatchSummary) -> None:
         return
     st.dataframe(
         build_batch_results_table(summary),
-        use_container_width=True,
+        width="stretch",
         hide_index=True,
     )
     render_batch_alert_summary(summary)
