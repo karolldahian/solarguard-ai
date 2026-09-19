@@ -86,8 +86,16 @@ st.sidebar.divider()
 st.sidebar.markdown(
     "**SolarGuard AI v1.0**  \n"
     "Especializacion en IA — UAO  \n"
-    "[Documentacion Docker](docs/despliegue_docker.md)"
+    "[Repositorio en GitHub](https://github.com/karolldahian/solarguard-ai)"
 )
+with st.sidebar.expander("🐳 Guia de Despliegue Docker"):
+    st.markdown(
+        "**Comandos de Orquestacion:**  \n"
+        "- `make docker-up`: Levanta los 3 servicios  \n"
+        "- `make docker-down`: Detiene los contenedores  \n"
+        "- `make docker-logs`: Ver logs en vivo  \n\n"
+        "[Ver documentacion completa en GitHub](https://github.com/karolldahian/solarguard-ai/blob/main/docs/despliegue_docker.md)"
+    )
 
 render_header()
 render_usage_guide()
