@@ -51,7 +51,7 @@ run:
 	uv run solarguard-ai
 
 streamlit:
-	@python -c "import pathlib, subprocess; subprocess.run(['uv', 'run', 'streamlit', 'run', 'app.py']) if pathlib.Path('app.py').is_file() else print('\n[AVISO] app.py aun no esta disponible en la rama actual.\n        La interfaz Streamlit esta siendo desarrollada por el equipo (Tarea 9 - Karoll).\n')"
+	@python -c "import pathlib, subprocess; subprocess.run(['uv', 'run', 'python', '-m', 'streamlit', 'run', 'app.py']) if pathlib.Path('app.py').is_file() else print('\n[AVISO] app.py aun no esta disponible en la rama actual.\n        La interfaz Streamlit esta siendo desarrollada por el equipo (Tarea 9 - Karoll).\n')"
 
 backend:
 	@python -c "import pathlib, subprocess; subprocess.run(['uv', 'run', 'python', '-m', 'solarguard_ai.servidor_grpc']) if pathlib.Path('src/solarguard_ai/servidor_grpc.py').is_file() else print('\n[AVISO] servidor_grpc.py aun no esta disponible en la rama actual.\n        El servidor gRPC esta siendo desarrollado por el equipo (Tarea 11 - Jarvin).\n')"
@@ -131,7 +131,7 @@ clean:
 
 mlflow-ui:
 	@echo Iniciando MLflow UI en http://localhost:5000 ...
-	@uv run mlflow ui --host 0.0.0.0 --port 5000
+	@uv run python -m mlflow ui --host 0.0.0.0 --port 5000
 
 mlflow-clean:
 	@echo Limpiando runs locales de MLflow...
