@@ -72,7 +72,7 @@ def test_render_image_preview_muestra_la_imagen(mock_st: MagicMock) -> None:
     render_image_preview(loaded)
 
     mock_st.image.assert_called_once_with(
-        loaded.image, caption=loaded.source, use_container_width=True
+        loaded.image, caption=loaded.source, width="stretch"
     )
 
 

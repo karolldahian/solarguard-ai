@@ -53,7 +53,7 @@ def upload_images():
 
 def render_image_preview(loaded: LoadedImage) -> None:
     """Muestra la imagen cargada con su nombre como referencia."""
-    st.image(loaded.image, caption=loaded.source, use_container_width=True)
+    st.image(loaded.image, caption=loaded.source, width="stretch")
 
 
 def render_image_metadata(loaded: LoadedImage) -> None:

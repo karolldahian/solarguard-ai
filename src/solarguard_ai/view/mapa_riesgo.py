@@ -130,7 +130,7 @@ def render_risk_heatmap(records: Sequence[AnalysisRecord]) -> None:
 
     matrix = build_risk_matrix(records)
     _render_unexpected_priority_warning(matrix)
-    st.plotly_chart(build_risk_heatmap(matrix), use_container_width=True)
+    st.plotly_chart(build_risk_heatmap(matrix), width="stretch")
 
 
 def _render_unexpected_priority_warning(matrix: RiskMatrix) -> None:
