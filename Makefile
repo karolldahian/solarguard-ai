@@ -131,7 +131,7 @@ clean:
 
 mlflow-ui:
 	@echo Iniciando MLflow UI en http://localhost:5000 ...
-	@uv run python -m mlflow ui --host 0.0.0.0 --port 5000
+	@uv run python -m mlflow ui --host 127.0.0.1 --port 5000 --workers 1
 
 mlflow-clean:
 	@echo Limpiando runs locales de MLflow...
