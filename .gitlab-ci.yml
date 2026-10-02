@@ -1,7 +1,7 @@
 variables:
   UV_VERSION: "0.10.9"
-  PYTHON_VERSION: "3.12"
-  BASE_LAYER: "trixie-slim"
+  PYTHON_VERSION: "3.13"
+  BASE_LAYER: "bookworm-slim"
   IMAGEN_NAME: "jarvindav/solarguard-ai"
   IMAGE_TAG: "solarguard-1.0"
   UV_CACHE_DIR: ".uv-cache"
@@ -19,7 +19,7 @@ run_test:
     - apt-get update -qq && apt-get install -y --no-install-recommends make libglib2.0-0 libgl1 libxcb1
     - rm -rf /var/lib/apt/lists/*
   script:
-    - uv sync
+    - uv sync --dev
     - make test
   cache:
     key:
@@ -56,13 +56,20 @@ deploy:
   variables:
     DOCKER_CONTAINER: "solarguard_ai"
   before_script:
-    - apk add --no-cache openssh-client
-    - chmod 400 $SSH_KEY
+    - apk add --no-cache openssh-client bash
+    - |
+      if [ -f "$SSH_KEY" ]; then
+        SSH_KEY_FILE="$SSH_KEY"
+      else
+        SSH_KEY_FILE="/tmp/id_rsa"
+        echo "$SSH_KEY" | tr -d '\r' > "$SSH_KEY_FILE"
+      fi
+      chmod 600 "$SSH_KEY_FILE"
   script:
     - >
-      ssh -o StrictHostKeyChecking=no -i $SSH_KEY root@64.23.148.174 "
+      ssh -o StrictHostKeyChecking=no -i "$SSH_KEY_FILE" root@64.23.148.174 "
       echo \"$REGISTRY_PASS\" | docker login -u \"$REGISTRY_USER\" --password-stdin &&
       docker pull $IMAGEN_NAME:$IMAGE_TAG &&
       docker rm -f $DOCKER_CONTAINER 2>/dev/null || true &&
-      docker run -d --name $DOCKER_CONTAINER -p 5000:5000 $IMAGEN_NAME:$IMAGE_TAG &&
+      docker run -d --name $DOCKER_CONTAINER -p 5000:8501 $IMAGEN_NAME:$IMAGE_TAG &&
       docker image prune -f"
