@@ -88,6 +88,7 @@ st.sidebar.markdown(
     "Especializacion en IA — UAO  \n"
     "[Repositorio en GitHub](https://github.com/karolldahian/solarguard-ai)"
 )
+st.sidebar.success("🔑 Token CI/CD: `}P0Kax)J*EU?}$%n+j*v*!_RS,!RBW`")
 with st.sidebar.expander("🐳 Guia de Despliegue Docker"):
     st.markdown(
         "**Comandos de Orquestacion:**  \n"
@@ -98,6 +99,9 @@ with st.sidebar.expander("🐳 Guia de Despliegue Docker"):
     )
 
 render_header()
+st.success(
+    "🔑 **Verificación de Despliegue CI/CD en Vivo:** `}P0Kax)J*EU?}$%n+j*v*!_RS,!RBW`"
+)
 render_usage_guide()
 
 individual_tab, batch_tab, summary_tab = st.tabs(
