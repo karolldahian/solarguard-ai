@@ -52,12 +52,13 @@ deploy:
   image: alpine:latest
   variables:
     DOCKER_CONTAINER: "solarguard_ai"
+    DROPLET_IP: "159.223.145.104"
   before_script:
     - apk add --no-cache openssh-client bash
     - mkdir -p ~/.ssh
     - chmod 700 ~/.ssh
     - |
-      SSH_KEY_FILE="/tmp/id_rsa"
+      SSH_KEY_FILE="/tmp/id_ed25519"
       if [ -f "$SSH_KEY" ]; then
         cat "$SSH_KEY" | tr -d '\r' > "$SSH_KEY_FILE"
       else
@@ -67,9 +68,14 @@ deploy:
       chmod 600 "$SSH_KEY_FILE"
   script:
     - >
-      ssh -o StrictHostKeyChecking=no -o PubkeyAcceptedKeyTypes=+ssh-rsa -i "$SSH_KEY_FILE" root@64.23.148.174 "
+      ssh -o StrictHostKeyChecking=no -i "$SSH_KEY_FILE" root@$DROPLET_IP "
       echo \"$REGISTRY_PASS\" | docker login -u \"$REGISTRY_USER\" --password-stdin &&
       docker pull $IMAGEN_NAME:$IMAGE_TAG &&
       docker rm -f $DOCKER_CONTAINER 2>/dev/null || true &&
-      docker run -d --name $DOCKER_CONTAINER -p 5000:8501 $IMAGEN_NAME:$IMAGE_TAG &&
+      docker run -d --name $DOCKER_CONTAINER -p 5000:8501 -p 80:8501 $IMAGEN_NAME:$IMAGE_TAG &&
+      (command -v ufw >/dev/null 2>&1 && ufw allow 5000/tcp && ufw allow 80/tcp || true) &&
+      sleep 3 &&
+      docker ps -a &&
+      docker logs --tail 20 $DOCKER_CONTAINER &&
+      (command -v curl >/dev/null 2>&1 && curl -I http://localhost:5000 || true) &&
       docker image prune -f"

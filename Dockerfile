@@ -38,4 +38,4 @@ RUN uv sync --frozen --no-dev
 EXPOSE 8501 50051 5000
 
 # Comando por defecto (inicia el frontend por ahora)
-CMD ["uv", "run", "streamlit", "run", "app.py", "--server.port=8501", "--server.address=0.0.0.0"]
+CMD ["uv", "run", "--no-dev", "streamlit", "run", "app.py", "--server.port=8501", "--server.address=0.0.0.0"]
