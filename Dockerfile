@@ -5,7 +5,9 @@ FROM python:3.13-slim
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
     UV_SYSTEM_PYTHON=1 \
-    DISPLAY=:0
+    DISPLAY=:0 \
+    STREAMLIT_SERVER_HEADLESS=true \
+    STREAMLIT_BROWSER_GATHER_USAGE_STATS=false
 
 # Instala dependencias del sistema necesarias
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -38,4 +40,4 @@ RUN uv sync --frozen --no-dev
 EXPOSE 8501 50051 5000
 
 # Comando por defecto (inicia el frontend por ahora)
-CMD ["uv", "run", "--no-dev", "streamlit", "run", "app.py", "--server.port=8501", "--server.address=0.0.0.0"]
+CMD ["uv", "run", "--no-dev", "streamlit", "run", "app.py", "--server.port=8501", "--server.address=0.0.0.0", "--server.headless=true"]
