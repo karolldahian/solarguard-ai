@@ -84,7 +84,7 @@ if modo_backend == "Microservicio gRPC (Desacoplado)":
 
 st.sidebar.divider()
 st.sidebar.markdown(
-    "**SolarGuard AI v1.0**  \n"
+    "**SolarGuard AI v1.1**  \n"
     "Especializacion en IA — UAO  \n"
     "[Repositorio en GitHub](https://github.com/karolldahian/solarguard-ai)"
 )
