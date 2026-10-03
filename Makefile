@@ -51,10 +51,10 @@ run:
 	uv run solarguard-ai
 
 streamlit:
-	@python -c "import pathlib, subprocess; subprocess.run(['uv', 'run', 'python', '-m', 'streamlit', 'run', 'app.py']) if pathlib.Path('app.py').is_file() else print('\n[AVISO] app.py aun no esta disponible en la rama actual.\n        La interfaz Streamlit esta siendo desarrollada por el equipo (Tarea 9 - Karoll).\n')"
+	uv run python -m streamlit run app.py
 
 backend:
-	@python -c "import pathlib, subprocess; subprocess.run(['uv', 'run', 'python', '-m', 'solarguard_ai.servidor_grpc']) if pathlib.Path('src/solarguard_ai/servidor_grpc.py').is_file() else print('\n[AVISO] servidor_grpc.py aun no esta disponible en la rama actual.\n        El servidor gRPC esta siendo desarrollado por el equipo (Tarea 11 - Jarvin).\n')"
+	uv run python -m solarguard_ai.servidor_grpc
 
 # ------------------------------------------------------------------------------
 # Entorno y Dependencias
@@ -119,10 +119,10 @@ pre-commit-install:
 
 clean:
 	@echo Limpiando caches y archivos temporales...
-	@python -c "import pathlib, shutil; [shutil.rmtree(p, ignore_errors=True) for p in pathlib.Path('.').rglob('__pycache__')]"
-	@python -c "import pathlib, shutil; [shutil.rmtree(p, ignore_errors=True) for p in pathlib.Path('.').rglob('.pytest_cache')]"
-	@python -c "import pathlib, shutil; [shutil.rmtree(p, ignore_errors=True) for p in pathlib.Path('.').rglob('.ruff_cache')]"
-	@python -c "import pathlib, shutil; [shutil.rmtree(p, ignore_errors=True) for p in pathlib.Path('.').rglob('htmlcov')]"
+	@uv run python -c "import pathlib, shutil; [shutil.rmtree(p, ignore_errors=True) for p in pathlib.Path('.').rglob('__pycache__')]"
+	@uv run python -c "import pathlib, shutil; [shutil.rmtree(p, ignore_errors=True) for p in pathlib.Path('.').rglob('.pytest_cache')]"
+	@uv run python -c "import pathlib, shutil; [shutil.rmtree(p, ignore_errors=True) for p in pathlib.Path('.').rglob('.ruff_cache')]"
+	@uv run python -c "import pathlib, shutil; [shutil.rmtree(p, ignore_errors=True) for p in pathlib.Path('.').rglob('htmlcov')]"
 	@echo Limpieza completada exitosamente.
 
 # ------------------------------------------------------------------------------
@@ -135,7 +135,7 @@ mlflow-ui:
 
 mlflow-clean:
 	@echo Limpiando runs locales de MLflow...
-	@python -c "import pathlib, shutil; [shutil.rmtree(p, ignore_errors=True) for p in pathlib.Path('.').rglob('mlruns')]"
+	@uv run python -c "import pathlib, shutil; [shutil.rmtree(p, ignore_errors=True) for p in pathlib.Path('.').rglob('mlruns')]"
 	@echo Limpieza de MLflow completada.
 
 # ------------------------------------------------------------------------------
