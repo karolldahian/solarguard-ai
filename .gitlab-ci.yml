@@ -72,8 +72,8 @@ deploy:
       echo \"$REGISTRY_PASS\" | docker login -u \"$REGISTRY_USER\" --password-stdin &&
       docker pull $IMAGEN_NAME:$IMAGE_TAG &&
       docker rm -f $DOCKER_CONTAINER 2>/dev/null || true &&
-      docker run -d --name $DOCKER_CONTAINER -p 5000:8501 -p 80:8501 $IMAGEN_NAME:$IMAGE_TAG &&
-      (command -v ufw >/dev/null 2>&1 && ufw allow 5000/tcp && ufw allow 80/tcp || true) &&
+      docker run -d --name $DOCKER_CONTAINER -p 5000:8501 $IMAGEN_NAME:$IMAGE_TAG &&
+      (command -v ufw >/dev/null 2>&1 && ufw allow 5000/tcp || true) &&
       sleep 3 &&
       docker ps -a &&
       docker logs --tail 20 $DOCKER_CONTAINER &&
