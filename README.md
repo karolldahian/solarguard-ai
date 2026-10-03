@@ -7,6 +7,8 @@
 [![Model Hugging Face](https://img.shields.io/badge/Model-solarscan--yolov8n--cls-FFD21E?logo=huggingface&logoColor=black)](https://huggingface.co/SaifElgalaly/solarscan-yolov8n-cls)
 [![Runtime ONNX](https://img.shields.io/badge/Runtime-ONNX%20Runtime-005CED?logo=onnx&logoColor=white)](https://onnxruntime.ai/)
 [![CI Pipeline](https://img.shields.io/badge/CI%2FCD-GitHub%20Actions-2088FF?logo=githubactions&logoColor=white)](.github/workflows/ci.yml)
+[![GitLab CI/CD](https://img.shields.io/badge/GitLab%20CI%2FCD-Passing-FC6D26?logo=gitlab&logoColor=white)](https://gitlab.com/jose.luque1/solarguard-ai)
+[![DigitalOcean Droplet](https://img.shields.io/badge/Production%20Live-159.223.145.104%3A5000-0080FF?logo=digitalocean&logoColor=white)](http://159.223.145.104:5000)
 [![License MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 > **Prototipo Integral de Inteligencia Artificial para Detección de Anomalías Superficiales y Triaje Automatizado de Mantenimiento en Granjas Fotovoltaicas.**
@@ -23,11 +25,14 @@
 5. [Guía de Inicio Rápido (Paso a Paso)](#5-guía-de-inicio-rápido-paso-a-paso)
 6. [Automatización con Makefile](#6-automatización-con-makefile)
 7. [Guía de Uso del Pipeline en Código](#7-guía-de-uso-del-pipeline-en-código)
-8. [Alineación con la Rúbrica Académica (Módulo 3)](#8-alineación-con-la-rúbrica-académica-módulo-3)
-9. [Estructura del Repositorio](#9-estructura-del-repositorio)
-10. [Seguridad y Uso Responsable](#10-seguridad-y-uso-responsable)
-11. [Equipo de Desarrollo](#11-equipo-de-desarrollo)
-12. [Licencia](#12-licencia)
+8. [MLflow Tracking (Observabilidad de Inferencia)](#8-mlflow-tracking-observabilidad-de-inferencia)
+9. [Despliegue y Orquestación con Docker](#9-despliegue-y-orquestación-con-docker)
+10. [Alineación con la Rúbrica Académica (Módulo 3)](#10-alineación-con-la-rúbrica-académica-módulo-3)
+11. [Operación en la Nube y CI/CD (Módulo 4)](#11-operación-en-la-nube-y-cicd-módulo-4)
+12. [Estructura del Repositorio](#12-estructura-del-repositorio)
+13. [Seguridad y Uso Responsable](#13-seguridad-y-uso-responsable)
+14. [Equipo de Desarrollo](#14-equipo-de-desarrollo)
+15. [Licencia](#15-licencia)
 
 ---
 
@@ -365,9 +370,41 @@ SolarGuard AI cumple rigurosamente con los criterios de evaluación del **Módul
 └──────────────────────┴───────┴─────────────────────────────────────────┘
 ```
 
+## 11. Operación en la Nube y CI/CD (Módulo 4: 15% de la nota final)
+
+SolarGuard AI implementa un pipeline automatizado de Integración y Despliegue Continuo (CI/CD) en la nube mediante **GitLab CI** y **DigitalOcean**, cumpliendo con la totalidad de los requerimientos de la entrega final:
+
+- **Repositorio Oficial en GitLab:** [gitlab.com/jose.luque1/solarguard-ai](https://gitlab.com/jose.luque1/solarguard-ai)
+- **Instancia en Producción (Droplet DigitalOcean):** [http://159.223.145.104:5000](http://159.223.145.104:5000)
+- **Imagen Docker en Docker Hub:** [`jarvindav/solarguard-ai:solarguard-1.0`](https://hub.docker.com/r/jarvindav/solarguard-ai)
+- **Infraestructura Cloud:** Droplet en DigitalOcean con Ubuntu 24.04 LTS (NYC1).
+
+### 11.1. Pipeline de Tres Etapas en `.gitlab-ci.yml`
+
+```mermaid
+flowchart LR
+    subgraph STAGE1 ["1. Stage: test"]
+        T1["uv sync --dev"] --> T2["make test<br/>(284 tests unitarios)"]
+    end
+
+    subgraph STAGE2 ["2. Stage: build"]
+        B1["Docker-in-Docker"] --> B2["Push jarvindav/solarguard-ai<br/>a Docker Hub"]
+    end
+
+    subgraph STAGE3 ["3. Stage: deploy"]
+        D1["SSH seguro (ED25519)"] --> D2["Pull & Reinicio Contenedores<br/>Droplet: 159.223.145.104:5000"]
+    end
+
+    STAGE1 --> STAGE2 --> STAGE3
+```
+
+1. **`test` (`run_test`):** Ejecutado en imagen base `ghcr.io/astral-sh/uv:python3.13-bookworm-slim`. Valida tipado, linting y ejecuta los **284 tests unitarios** sin advertencias ni deprecaciones con Pytest bajo el gestor exclusivo Astral UV.
+2. **`build` (`build_image`):** Construye la imagen de producción con capas cacheadas mediante Docker-in-Docker y publica los tags `:solarguard-1.0` y `:latest` en Docker Hub mediante credenciales cifradas (`REGISTRY_USER`, `REGISTRY_PASS`).
+3. **`deploy` (`deploy`):** Se autentica por SSH asimétrico utilizando clave `ED25519` (`SSH_KEY`) en el Droplet remoto de DigitalOcean, descarga la última versión y orquesta los contenedores desacoplados (Streamlit Frontend + Inferencia gRPC) montando el volumen determinista de pesos `models/best.onnx` sin versionar binarios pesados en Git.
+
 ---
 
-## 11. Estructura del Repositorio
+## 12. Estructura del Repositorio
 
 ```text
 solarguard-ai/
