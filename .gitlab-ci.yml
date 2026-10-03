@@ -71,8 +71,10 @@ deploy:
       ssh -o StrictHostKeyChecking=no -i "$SSH_KEY_FILE" root@$DROPLET_IP "
       echo \"$REGISTRY_PASS\" | docker login -u \"$REGISTRY_USER\" --password-stdin &&
       docker pull $IMAGEN_NAME:$IMAGE_TAG &&
-      docker rm -f $DOCKER_CONTAINER 2>/dev/null || true &&
-      docker run -d --name $DOCKER_CONTAINER -p 5000:8501 -e STREAMLIT_SERVER_HEADLESS=true -e STREAMLIT_BROWSER_GATHER_USAGE_STATS=false $IMAGEN_NAME:$IMAGE_TAG &&
+      docker rm -f $DOCKER_CONTAINER solarguard_backend 2>/dev/null || true &&
+      mkdir -p /root/solarguard/models &&
+      docker run -d --name $DOCKER_CONTAINER -p 5000:8501 -e MLFLOW_ENABLED=false -e STREAMLIT_SERVER_HEADLESS=true -e STREAMLIT_BROWSER_GATHER_USAGE_STATS=false -v /root/solarguard/models:/app/models:ro $IMAGEN_NAME:$IMAGE_TAG &&
+      docker run -d --name solarguard_backend --network container:$DOCKER_CONTAINER -e MLFLOW_ENABLED=false -v /root/solarguard/models:/app/models:ro $IMAGEN_NAME:$IMAGE_TAG uv run --no-dev python -m solarguard_ai.servidor_grpc --puerto 50051 &&
       (command -v ufw >/dev/null 2>&1 && ufw allow 5000/tcp || true) &&
       sleep 3 &&
       docker ps -a &&
