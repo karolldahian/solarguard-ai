@@ -67,7 +67,7 @@ deploy:
       chmod 600 "$SSH_KEY_FILE"
   script:
     - >
-      ssh -o StrictHostKeyChecking=no -o PubkeyAcceptedKeyTypes=+ssh-rsa -i "$SSH_KEY_FILE" root@64.23.148.174 "
+      ssh -o StrictHostKeyChecking=no -o PubkeyAcceptedKeyTypes=+ssh-rsa -i "$SSH_KEY_FILE" root@159.223.145.104 "
       echo \"$REGISTRY_PASS\" | docker login -u \"$REGISTRY_USER\" --password-stdin &&
       docker pull $IMAGEN_NAME:$IMAGE_TAG &&
       docker rm -f $DOCKER_CONTAINER 2>/dev/null || true &&
