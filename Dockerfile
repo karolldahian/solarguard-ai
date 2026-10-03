@@ -25,11 +25,14 @@ WORKDIR /app
 # Copia los archivos de gestión de dependencias
 COPY pyproject.toml uv.lock ./
 
-# Instala las dependencias del proyecto usando uv
-RUN uv sync --frozen --no-dev
+# Instala las dependencias externas usando uv (sin compilar el proyecto aun)
+RUN uv sync --frozen --no-dev --no-install-project
 
 # Copia el resto del código
 COPY . .
+
+# Sincroniza e instala el proyecto
+RUN uv sync --frozen --no-dev
 
 # Expone los puertos (Streamlit: 8501, gRPC: 50051, MLflow: 5000)
 EXPOSE 8501 50051 5000
